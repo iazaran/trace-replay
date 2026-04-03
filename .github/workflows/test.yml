@@ -14,12 +14,15 @@ jobs:
       fail-fast: false
       matrix:
         php: ['8.2', '8.3', '8.4']
-        laravel: ['10.*', '11.*', '12.*']
+        laravel: ['10.*', '11.*', '12.*', '13.*']
         stability: [prefer-lowest, prefer-stable]
         exclude:
-          # Laravel 10 requires PHP ^8.1 and is NOT compatible with PHP 8.4
+          # Laravel 10 is NOT compatible with PHP 8.4
           - php: '8.4'
             laravel: '10.*'
+          # Laravel 13 requires PHP ^8.3
+          - php: '8.2'
+            laravel: '13.*'
 
     name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }}
 
