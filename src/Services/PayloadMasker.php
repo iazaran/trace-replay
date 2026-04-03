@@ -20,13 +20,10 @@ class PayloadMasker
 
     /**
      * Recursively mask sensitive fields in an array.
-     *
-     * @param  mixed $data
-     * @return mixed
      */
     public function mask(mixed $data): mixed
     {
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             return $data;
         }
 
@@ -44,4 +41,3 @@ class PayloadMasker
         return $result;
     }
 }
-

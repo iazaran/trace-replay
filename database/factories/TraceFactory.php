@@ -12,17 +12,17 @@ class TraceFactory extends Factory
     public function definition(): array
     {
         $statuses = ['success', 'error', 'processing'];
-        $status   = $statuses[array_rand($statuses)];
+        $status = $statuses[array_rand($statuses)];
 
         return [
-            'name'         => implode(' ', array_map(fn() => fake()->word(), range(1, 3))),
-            'status'       => $status,
-            'http_status'  => $status === 'success' ? 200 : ($status === 'error' ? 500 : null),
-            'duration_ms'  => round(rand(10, 5000) + rand(0, 99) / 100, 2),
-            'ip_address'   => fake()->ipv4(),
-            'user_agent'   => fake()->userAgent(),
-            'tags'         => [],
-            'started_at'   => now(),
+            'name' => implode(' ', array_map(fn () => fake()->word(), range(1, 3))),
+            'status' => $status,
+            'http_status' => $status === 'success' ? 200 : ($status === 'error' ? 500 : null),
+            'duration_ms' => round(rand(10, 5000) + rand(0, 99) / 100, 2),
+            'ip_address' => fake()->ipv4(),
+            'user_agent' => fake()->userAgent(),
+            'tags' => [],
+            'started_at' => now(),
             'completed_at' => $status !== 'processing' ? now()->addMilliseconds(rand(10, 500)) : null,
         ];
     }
@@ -42,4 +42,3 @@ class TraceFactory extends Factory
         return $this->state(['status' => 'processing', 'http_status' => null, 'completed_at' => null]);
     }
 }
-

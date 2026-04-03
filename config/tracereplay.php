@@ -38,9 +38,9 @@ return [
     | worker to avoid adding latency to the request lifecycle.
     */
     'queue' => [
-        'enabled'    => env('TRACEREPLAY_QUEUE_ENABLED', false),
+        'enabled' => env('TRACEREPLAY_QUEUE_ENABLED', false),
         'connection' => env('TRACEREPLAY_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
-        'queue'      => env('TRACEREPLAY_QUEUE_NAME', 'default'),
+        'queue' => env('TRACEREPLAY_QUEUE_NAME', 'default'),
     ],
 
     /*
@@ -79,7 +79,7 @@ return [
     */
     'replay' => [
         'default_base_url' => env('TRACEREPLAY_REPLAY_URL', env('APP_URL', 'http://localhost')),
-        'timeout'          => env('TRACEREPLAY_REPLAY_TIMEOUT', 30),
+        'timeout' => env('TRACEREPLAY_REPLAY_TIMEOUT', 30),
     ],
 
     /*
@@ -99,7 +99,7 @@ return [
     | Protect the TraceReplay dashboard. For production use, add 'auth' or a
     | custom gate middleware, e.g. ['web', 'auth', 'can:view-tracereplay'].
     */
-    'middleware'     => ['web'],
+    'middleware' => ['web'],
     'api_middleware' => ['api'],
 
     /*
@@ -121,8 +121,8 @@ return [
     */
     'notifications' => [
         'on_failure' => env('TRACEREPLAY_NOTIFY_ON_FAILURE', false),
-        'channels'   => ['mail'],           // 'mail', 'slack'
-        'mail'       => [
+        'channels' => ['mail'],           // 'mail', 'slack'
+        'mail' => [
             'to' => env('TRACEREPLAY_NOTIFY_EMAIL', null),
         ],
         'slack' => [
@@ -140,7 +140,7 @@ return [
     */
     'ai' => [
         'openai_api_key' => env('TRACEREPLAY_OPENAI_KEY', null),
-        'model'          => env('TRACEREPLAY_OPENAI_MODEL', 'gpt-4o'),
+        'model' => env('TRACEREPLAY_OPENAI_MODEL', 'gpt-4o'),
     ],
 
     /*
@@ -151,7 +151,7 @@ return [
     | in traces without any manual instrumentation.
     */
     'auto_trace' => [
-        'jobs'     => env('TRACEREPLAY_AUTO_TRACE_JOBS', true),
+        'jobs' => env('TRACEREPLAY_AUTO_TRACE_JOBS', true),
         'commands' => env('TRACEREPLAY_AUTO_TRACE_COMMANDS', false),
         // Artisan commands to exclude from auto-tracing (exact names)
         'exclude_commands' => [
@@ -160,4 +160,3 @@ return [
         ],
     ],
 ];
-

@@ -10,14 +10,14 @@ $middleware = array_merge(
 );
 
 Route::group([
-    'prefix'     => 'tracereplay',
-    'as'         => 'tracereplay.',
+    'prefix' => 'tracereplay',
+    'as' => 'tracereplay.',
     'middleware' => $middleware,
 ], function () {
-    Route::get('/',                                   [DashboardController::class, 'index'])->name('index');
-    Route::get('/traces/{id}',                        [DashboardController::class, 'show'])->name('show');
-    Route::post('/traces/{id}/replay',                [DashboardController::class, 'replay'])->name('replay');
-    Route::post('/traces/{id}/ai-prompt',             [DashboardController::class, 'generatePrompt'])->name('ai.prompt');
-    Route::get('/stats',                              [DashboardController::class, 'stats'])->name('stats');
-    Route::get('/traces/{id}/export',                 [DashboardController::class, 'export'])->name('export');
+    Route::get('/', [DashboardController::class, 'index'])->name('index');
+    Route::get('/traces/{id}', [DashboardController::class, 'show'])->name('show');
+    Route::post('/traces/{id}/replay', [DashboardController::class, 'replay'])->name('replay');
+    Route::post('/traces/{id}/ai-prompt', [DashboardController::class, 'generatePrompt'])->name('ai.prompt');
+    Route::get('/stats', [DashboardController::class, 'stats'])->name('stats');
+    Route::get('/traces/{id}/export', [DashboardController::class, 'export'])->name('export');
 });

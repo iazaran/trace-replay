@@ -51,7 +51,7 @@ class DashboardController extends Controller
 
     public function generatePrompt(string $id, AiPromptService $promptService): JsonResponse
     {
-        $trace  = Trace::with('steps')->findOrFail($id);
+        $trace = Trace::with('steps')->findOrFail($id);
         $prompt = $promptService->generateFixPrompt($trace);
 
         // If OpenAI key is configured, attempt a direct API call
@@ -59,8 +59,8 @@ class DashboardController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => [
-                'prompt'      => $prompt,
+            'data' => [
+                'prompt' => $prompt,
                 'ai_response' => $aiResponse,   // null when no key is configured
             ],
         ]);
@@ -68,22 +68,22 @@ class DashboardController extends Controller
 
     public function stats(): JsonResponse
     {
-        $total   = Trace::count();
-        $failed  = Trace::failed()->count();
+        $total = Trace::count();
+        $failed = Trace::failed()->count();
         $success = Trace::successful()->count();
-        $today   = Trace::whereDate('started_at', today())->count();
+        $today = Trace::whereDate('started_at', today())->count();
 
         $avgDuration = Trace::whereNotNull('duration_ms')->avg('duration_ms');
-        $slowest     = Trace::whereNotNull('duration_ms')->max('duration_ms');
+        $slowest = Trace::whereNotNull('duration_ms')->max('duration_ms');
 
         return response()->json([
-            'total'        => $total,
-            'success'      => $success,
-            'failed'       => $failed,
-            'today'        => $today,
+            'total' => $total,
+            'success' => $success,
+            'failed' => $failed,
+            'today' => $today,
             'failure_rate' => $total > 0 ? round(($failed / $total) * 100, 1) : 0,
             'avg_duration' => round($avgDuration ?? 0, 2),
-            'slowest'      => round($slowest ?? 0, 2),
+            'slowest' => round($slowest ?? 0, 2),
         ]);
     }
 
@@ -91,13 +91,12 @@ class DashboardController extends Controller
     {
         $trace = Trace::with('steps')->findOrFail($id);
 
-        $filename = 'trace-' . substr($id, 0, 8) . '.json';
-        $content  = json_encode($trace->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $filename = 'trace-'.substr($id, 0, 8).'.json';
+        $content = json_encode($trace->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         return response($content, 200, [
-            'Content-Type'        => 'application/json',
+            'Content-Type' => 'application/json',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
 }
-

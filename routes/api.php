@@ -9,7 +9,7 @@ Route::group([
     'middleware' => config('tracereplay.api_middleware', ['api']),
 ], function () {
     Route::post('/', [McpController::class, 'handleRpc'])->name('rpc');
-    
+
     // REST fallbacks if preferred over RPC
     Route::get('/traces', [McpController::class, 'listTraces']);
     Route::get('/traces/{trace}/context', [McpController::class, 'getContext']);

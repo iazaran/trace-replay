@@ -17,12 +17,13 @@ use TraceReplay\Services\AiPromptService;
 use TraceReplay\Services\NotificationService;
 use TraceReplay\Services\PayloadMasker;
 use TraceReplay\Services\ReplayService;
+use TraceReplay\View\Components\TraceBar;
 
 class TraceReplayServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__ . '/../config/tracereplay.php', 'tracereplay');
+        $this->mergeConfigFrom(__DIR__.'/../config/tracereplay.php', 'tracereplay');
 
         $this->app->singleton('tracereplay', fn ($app) => new TraceReplayManager($app));
 
@@ -38,15 +39,15 @@ class TraceReplayServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                __DIR__ . '/../config/tracereplay.php' => config_path('tracereplay.php'),
+                __DIR__.'/../config/tracereplay.php' => config_path('tracereplay.php'),
             ], 'tracereplay-config');
 
             $this->publishes([
-                __DIR__ . '/../database/migrations/' => database_path('migrations'),
+                __DIR__.'/../database/migrations/' => database_path('migrations'),
             ], 'tracereplay-migrations');
 
             $this->publishes([
-                __DIR__ . '/../resources/views' => resource_path('views/vendor/tracereplay'),
+                __DIR__.'/../resources/views' => resource_path('views/vendor/tracereplay'),
             ], 'tracereplay-views');
 
             $this->commands([
@@ -55,20 +56,20 @@ class TraceReplayServiceProvider extends ServiceProvider
             ]);
         }
 
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
-        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'tracereplay');
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'tracereplay');
         $this->loadViewComponentsAs('tracereplay', [
-            \TraceReplay\View\Components\TraceBar::class,
+            TraceBar::class,
         ]);
 
-        $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
-        $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
 
         // Auto-trace queue jobs
         if (config('tracereplay.auto_trace.jobs', true)) {
             Event::listen(JobProcessing::class, fn (JobProcessing $e) => $this->app->make(JobTraceListener::class)->onJobProcessing($e));
-            Event::listen(JobProcessed::class,  fn (JobProcessed $e)  => $this->app->make(JobTraceListener::class)->onJobProcessed($e));
-            Event::listen(JobFailed::class,     fn (JobFailed $e)     => $this->app->make(JobTraceListener::class)->onJobFailed($e));
+            Event::listen(JobProcessed::class, fn (JobProcessed $e) => $this->app->make(JobTraceListener::class)->onJobProcessed($e));
+            Event::listen(JobFailed::class, fn (JobFailed $e) => $this->app->make(JobTraceListener::class)->onJobFailed($e));
         }
 
         // Auto-trace artisan commands
@@ -78,4 +79,3 @@ class TraceReplayServiceProvider extends ServiceProvider
         }
     }
 }
-

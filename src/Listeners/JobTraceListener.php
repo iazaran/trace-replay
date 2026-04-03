@@ -11,16 +11,16 @@ class JobTraceListener
 {
     public function onJobProcessing(JobProcessing $event): void
     {
-        if (!config('tracereplay.auto_trace.jobs', true)) {
+        if (! config('tracereplay.auto_trace.jobs', true)) {
             return;
         }
 
         $jobName = $this->resolveJobName($event->job->payload());
 
         TraceReplay::start("Job: {$jobName}", [
-            'queue'      => $event->job->getQueue(),
+            'queue' => $event->job->getQueue(),
             'connection' => $event->connectionName,
-            'job_id'     => $event->job->getJobId(),
+            'job_id' => $event->job->getJobId(),
         ]);
 
         TraceReplay::checkpoint('Job Started', [
@@ -30,7 +30,7 @@ class JobTraceListener
 
     public function onJobProcessed(JobProcessed $_event): void
     {
-        if (!config('tracereplay.auto_trace.jobs', true)) {
+        if (! config('tracereplay.auto_trace.jobs', true)) {
             return;
         }
 
@@ -40,7 +40,7 @@ class JobTraceListener
 
     public function onJobFailed(JobFailed $event): void
     {
-        if (!config('tracereplay.auto_trace.jobs', true)) {
+        if (! config('tracereplay.auto_trace.jobs', true)) {
             return;
         }
 
@@ -53,7 +53,7 @@ class JobTraceListener
     private function resolveJobName(array $payload): string
     {
         $class = $payload['displayName'] ?? $payload['job'] ?? 'UnknownJob';
+
         return class_basename($class);
     }
 }
-

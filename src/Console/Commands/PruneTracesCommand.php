@@ -16,19 +16,21 @@ class PruneTracesCommand extends Command
 
     public function handle(): int
     {
-        $days   = (int) ($this->option('days') ?? config('tracereplay.retention_days', 30));
+        $days = (int) ($this->option('days') ?? config('tracereplay.retention_days', 30));
         $status = $this->option('status');
         $dryRun = $this->option('dry-run');
 
         if ($days <= 0) {
             $this->error('Retention days must be a positive integer.');
+
             return self::FAILURE;
         }
 
         $cutoff = now()->subDays($days);
 
-        if ($status && !\in_array($status, ['success', 'error', 'processing'], true)) {
+        if ($status && ! \in_array($status, ['success', 'error', 'processing'], true)) {
             $this->error("Invalid status '{$status}'. Use 'success', 'error', or 'processing'.");
+
             return self::FAILURE;
         }
 
@@ -42,18 +44,20 @@ class PruneTracesCommand extends Command
 
         if ($count === 0) {
             $this->info('No traces found matching the criteria.');
+
             return self::SUCCESS;
         }
 
         if ($dryRun) {
             $this->warn("[Dry Run] Would delete {$count} trace(s) older than {$days} day(s).");
+
             return self::SUCCESS;
         }
 
         $query->delete();
 
         $this->info("Deleted {$count} trace(s) older than {$days} day(s).");
+
         return self::SUCCESS;
     }
 }
-

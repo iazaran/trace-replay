@@ -17,18 +17,20 @@ class ExportTraceCommand extends Command
 
     public function handle(): int
     {
-        $id     = $this->argument('id');
+        $id = $this->argument('id');
         $format = strtolower($this->option('format'));
         $output = $this->option('output');
         $status = $this->option('status');
 
-        if (!\in_array($format, ['json', 'csv'], true)) {
+        if (! \in_array($format, ['json', 'csv'], true)) {
             $this->error("Unsupported format '{$format}'. Use 'json' or 'csv'.");
+
             return self::FAILURE;
         }
 
-        if ($status && !\in_array($status, ['success', 'error', 'processing'], true)) {
+        if ($status && ! \in_array($status, ['success', 'error', 'processing'], true)) {
             $this->error("Invalid status '{$status}'. Use 'success', 'error', or 'processing'.");
+
             return self::FAILURE;
         }
 
@@ -36,6 +38,7 @@ class ExportTraceCommand extends Command
             $traces = Trace::with('steps')->where('id', $id)->get();
             if ($traces->isEmpty()) {
                 $this->error("Trace '{$id}' not found.");
+
                 return self::FAILURE;
             }
         } else {
@@ -52,12 +55,14 @@ class ExportTraceCommand extends Command
 
         if ($output) {
             $dir = \dirname($output);
-            if ($dir && !\is_dir($dir)) {
+            if ($dir && ! \is_dir($dir)) {
                 $this->error("Directory '{$dir}' does not exist.");
+
                 return self::FAILURE;
             }
             if (@file_put_contents($output, $content) === false) {
                 $this->error("Failed to write to '{$output}'.");
+
                 return self::FAILURE;
             }
             $this->info("Exported {$traces->count()} trace(s) to {$output}");
@@ -75,22 +80,21 @@ class ExportTraceCommand extends Command
 
     private function toCsv($traces): string
     {
-        $rows   = [];
+        $rows = [];
         $rows[] = implode(',', ['id', 'name', 'status', 'duration_ms', 'steps', 'started_at', 'completed_at']);
 
         foreach ($traces as $trace) {
             $rows[] = implode(',', [
                 $trace->id,
-                '"' . str_replace('"', '""', $trace->name ?? '') . '"',
+                '"'.str_replace('"', '""', $trace->name ?? '').'"',
                 $trace->status,
                 $trace->duration_ms ?? 0,
                 $trace->steps->count(),
-                '"' . ($trace->started_at ?? '') . '"',
-                '"' . ($trace->completed_at ?? '') . '"',
+                '"'.($trace->started_at ?? '').'"',
+                '"'.($trace->completed_at ?? '').'"',
             ]);
         }
 
         return implode("\n", $rows);
     }
 }
-

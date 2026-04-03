@@ -2,10 +2,10 @@
 
 namespace TraceReplay\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
 use TraceReplay\Database\Factories\TraceFactory;
 
 class Trace extends Model
@@ -35,11 +35,11 @@ class Trace extends Model
     ];
 
     protected $casts = [
-        'tags'         => 'array',
-        'started_at'   => 'datetime',
+        'tags' => 'array',
+        'started_at' => 'datetime',
         'completed_at' => 'datetime',
-        'duration_ms'  => 'float',
-        'http_status'  => 'integer',
+        'duration_ms' => 'float',
+        'http_status' => 'integer',
     ];
 
     public function project()
@@ -68,8 +68,8 @@ class Trace extends Model
     {
         return $query->where(function (Builder $q) use ($term) {
             $q->where('name', 'like', "%{$term}%")
-              ->orWhere('user_id', 'like', "%{$term}%")
-              ->orWhere('ip_address', 'like', "%{$term}%");
+                ->orWhere('user_id', 'like', "%{$term}%")
+                ->orWhere('ip_address', 'like', "%{$term}%");
         });
     }
 

@@ -2,8 +2,8 @@
 
 namespace TraceReplay\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 
 class TraceStep extends Model
 {
@@ -28,13 +28,13 @@ class TraceStep extends Model
     ];
 
     protected $casts = [
-        'request_payload'  => 'array',
+        'request_payload' => 'array',
         'response_payload' => 'array',
-        'state_snapshot'   => 'array',
-        'duration_ms'      => 'float',
+        'state_snapshot' => 'array',
+        'duration_ms' => 'float',
         'db_query_time_ms' => 'float',
-        'memory_usage'     => 'integer',
-        'db_query_count'   => 'integer',
+        'memory_usage' => 'integer',
+        'db_query_count' => 'integer',
     ];
 
     public function trace()
@@ -45,9 +45,16 @@ class TraceStep extends Model
     public function getDurationColorAttribute(): string
     {
         $ms = $this->duration_ms ?? 0;
-        if ($ms < 50)  return 'green';
-        if ($ms < 200) return 'yellow';
-        if ($ms < 1000) return 'orange';
+        if ($ms < 50) {
+            return 'green';
+        }
+        if ($ms < 200) {
+            return 'yellow';
+        }
+        if ($ms < 1000) {
+            return 'orange';
+        }
+
         return 'red';
     }
 }

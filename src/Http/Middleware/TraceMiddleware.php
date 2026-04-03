@@ -12,7 +12,7 @@ class TraceMiddleware
 {
     public function handle(Request $request, Closure $next): SymfonyResponse
     {
-        if (!config('tracereplay.enabled')) {
+        if (! config('tracereplay.enabled')) {
             return $next($request);
         }
 
@@ -27,25 +27,25 @@ class TraceMiddleware
             return $next($request);
         }
 
-        $masker  = app(PayloadMasker::class);
+        $masker = app(PayloadMasker::class);
         $reqBody = $masker->mask($request->all());
 
         // Request::path() returns '/' for the root URI, or 'foo/bar' (no leading slash) for others.
-        $path  = $request->path();
-        $uri   = $path === '/' ? '/' : '/' . $path;
-        $trace = TraceReplay::start('HTTP ' . strtoupper($request->method()) . ' ' . $uri);
+        $path = $request->path();
+        $uri = $path === '/' ? '/' : '/'.$path;
+        $trace = TraceReplay::start('HTTP '.strtoupper($request->method()).' '.$uri);
 
-        if (!$trace) {
+        if (! $trace) {
             return $next($request);
         }
 
         // Capture the full request payload on the HTTP step
         $requestPayload = [
-            'method'  => $request->method(),
-            'uri'     => $uri,
+            'method' => $request->method(),
+            'uri' => $uri,
             'headers' => $masker->mask($request->headers->all()),
-            'body'    => $reqBody,
-            'query'   => $masker->mask($request->query->all()),
+            'body' => $reqBody,
+            'query' => $masker->mask($request->query->all()),
         ];
 
         /** @var SymfonyResponse $response */
@@ -58,18 +58,18 @@ class TraceMiddleware
 
     public function terminate(Request $request, SymfonyResponse $response): void
     {
-        if (!config('tracereplay.enabled')) {
+        if (! config('tracereplay.enabled')) {
             return;
         }
 
         $httpStatus = $response->getStatusCode();
-        $status     = ($httpStatus >= 400) ? 'error' : 'success';
+        $status = ($httpStatus >= 400) ? 'error' : 'success';
 
         // Capture response on the last step
         $masker = app(PayloadMasker::class);
 
         $responsePayload = [
-            'status'  => $httpStatus,
+            'status' => $httpStatus,
             'headers' => $masker->mask($response->headers->all()),
         ];
 

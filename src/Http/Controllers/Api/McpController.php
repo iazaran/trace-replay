@@ -5,8 +5,8 @@ namespace TraceReplay\Http\Controllers\Api;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use TraceReplay\Models\Trace;
-use TraceReplay\Services\ReplayService;
 use TraceReplay\Services\AiPromptService;
+use TraceReplay\Services\ReplayService;
 
 class McpController extends Controller
 {
@@ -20,7 +20,7 @@ class McpController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $query->paginate(20)
+            'data' => $query->paginate(20),
         ]);
     }
 
@@ -35,26 +35,26 @@ class McpController extends Controller
                 'completion_percentage' => $trace->completion_percentage,
                 'total_duration' => $trace->duration_ms,
                 'error_step' => $trace->error_step,
-            ]
+            ],
         ]);
     }
 
     public function triggerReplay(Request $request, $id, ReplayService $replayService)
     {
         $trace = Trace::with('steps')->findOrFail($id);
-        
+
         try {
             $overrideUrl = $request->input('override_url');
             $result = $replayService->replay($trace, $overrideUrl);
-            
+
             return response()->json([
                 'status' => 'success',
-                'data' => $result
+                'data' => $result,
             ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 400);
         }
     }
@@ -62,12 +62,12 @@ class McpController extends Controller
     public function generateFixPrompt($id, AiPromptService $promptService)
     {
         $trace = Trace::with('steps')->findOrFail($id);
-        
+
         return response()->json([
             'status' => 'success',
             'data' => [
-                'prompt' => $promptService->generateFixPrompt($trace)
-            ]
+                'prompt' => $promptService->generateFixPrompt($trace),
+            ],
         ]);
     }
 
@@ -109,13 +109,13 @@ class McpController extends Controller
                     break;
 
                 default:
-                    throw new \Exception("Method not found", -32601);
+                    throw new \Exception('Method not found', -32601);
             }
 
             return response()->json([
                 'jsonrpc' => '2.0',
                 'result' => $result,
-                'id' => $request->input('id')
+                'id' => $request->input('id'),
             ]);
         } catch (\Throwable $e) {
             return response()->json([
@@ -124,7 +124,7 @@ class McpController extends Controller
                     'code' => \is_int($e->getCode()) && $e->getCode() !== 0 ? $e->getCode() : -32000,
                     'message' => $e->getMessage(),
                 ],
-                'id' => $request->input('id')
+                'id' => $request->input('id'),
             ]);
         }
     }

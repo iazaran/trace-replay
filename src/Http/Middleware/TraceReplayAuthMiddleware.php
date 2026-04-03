@@ -18,11 +18,10 @@ class TraceReplayAuthMiddleware
     {
         $allowedIps = config('tracereplay.allowed_ips', []);
 
-        if (!empty($allowedIps) && !\in_array($request->ip(), $allowedIps, true)) {
+        if (! empty($allowedIps) && ! \in_array($request->ip(), $allowedIps, true)) {
             abort(403, 'Access to TraceReplay dashboard is restricted.');
         }
 
         return $next($request);
     }
 }
-

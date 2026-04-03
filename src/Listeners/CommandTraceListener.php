@@ -10,7 +10,7 @@ class CommandTraceListener
 {
     public function onCommandStarting(CommandStarting $event): void
     {
-        if (!config('tracereplay.auto_trace.commands', false)) {
+        if (! config('tracereplay.auto_trace.commands', false)) {
             return;
         }
 
@@ -25,7 +25,7 @@ class CommandTraceListener
         }
 
         TraceReplay::start("Artisan: {$event->command}", [
-            'command'   => $event->command,
+            'command' => $event->command,
             'arguments' => (string) $event->input,
         ]);
 
@@ -34,7 +34,7 @@ class CommandTraceListener
 
     public function onCommandFinished(CommandFinished $event): void
     {
-        if (!config('tracereplay.auto_trace.commands', false)) {
+        if (! config('tracereplay.auto_trace.commands', false)) {
             return;
         }
 
@@ -47,7 +47,7 @@ class CommandTraceListener
             return;
         }
 
-        if (!TraceReplay::getCurrentTrace()) {
+        if (! TraceReplay::getCurrentTrace()) {
             return;
         }
 
@@ -60,4 +60,3 @@ class CommandTraceListener
         TraceReplay::end($status);
     }
 }
-

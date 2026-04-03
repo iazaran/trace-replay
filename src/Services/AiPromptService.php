@@ -4,7 +4,6 @@ namespace TraceReplay\Services;
 
 use Illuminate\Support\Facades\Http;
 use TraceReplay\Models\Trace;
-use TraceReplay\Models\TraceStep;
 
 class AiPromptService
 {
@@ -15,19 +14,19 @@ class AiPromptService
     {
         $errorStep = $trace->error_step;
 
-        if (!$errorStep) {
-            return "This trace completed successfully with no errors recorded. Nothing to debug.";
+        if (! $errorStep) {
+            return 'This trace completed successfully with no errors recorded. Nothing to debug.';
         }
 
         $steps = $trace->steps()->orderBy('step_order')->get();
-        $app   = config('app.name', 'Laravel');
+        $app = config('app.name', 'Laravel');
 
-        $prompt  = "You are an expert Laravel/PHP engineer. Your task is to diagnose and fix a failed request.\n\n";
+        $prompt = "You are an expert Laravel/PHP engineer. Your task is to diagnose and fix a failed request.\n\n";
         $prompt .= "## Application Context\n";
         $prompt .= "- **App:** {$app}\n";
         $prompt .= "- **Trace ID:** `{$trace->id}`\n";
         $prompt .= "- **Trace Name:** {$trace->name}\n";
-        $prompt .= "- **Total Duration:** " . number_format($trace->duration_ms ?? 0, 2) . " ms\n";
+        $prompt .= '- **Total Duration:** '.number_format($trace->duration_ms ?? 0, 2)." ms\n";
         $prompt .= "- **Step Count:** {$steps->count()}\n";
         $prompt .= "- **Failed At:** Step #{$errorStep->step_order} — `{$errorStep->label}`\n";
 
@@ -41,11 +40,11 @@ class AiPromptService
 
         $prompt .= "## Execution Timeline\n\n";
         foreach ($steps as $step) {
-            $icon = match($step->status) {
-                'success'    => '✅',
-                'error'      => '❌',
+            $icon = match ($step->status) {
+                'success' => '✅',
+                'error' => '❌',
                 'checkpoint' => '📍',
-                default      => '⏳',
+                default => '⏳',
             };
             $prompt .= "{$icon} **Step {$step->step_order}: {$step->label}**";
             $prompt .= " | {$step->duration_ms} ms";
@@ -54,16 +53,16 @@ class AiPromptService
             }
             $prompt .= "\n";
 
-            if (!empty($step->request_payload)) {
-                $prompt .= "   - **Input:** `" . substr(json_encode($step->request_payload), 0, 500) . "`\n";
+            if (! empty($step->request_payload)) {
+                $prompt .= '   - **Input:** `'.substr(json_encode($step->request_payload), 0, 500)."`\n";
             }
-            if (!empty($step->state_snapshot)) {
-                $prompt .= "   - **State:** `" . substr(json_encode($step->state_snapshot), 0, 500) . "`\n";
+            if (! empty($step->state_snapshot)) {
+                $prompt .= '   - **State:** `'.substr(json_encode($step->state_snapshot), 0, 500)."`\n";
             }
 
             if ($step->id === $errorStep->id) {
                 $prompt .= "\n### 🚨 Failure Point\n\n";
-                $prompt .= "```json\n" . ($step->error_reason ?? 'No error details.') . "\n```\n\n";
+                $prompt .= "```json\n".($step->error_reason ?? 'No error details.')."\n```\n\n";
             }
         }
 
@@ -84,16 +83,16 @@ class AiPromptService
     public function callOpenAI(string $prompt): ?string
     {
         $apiKey = config('tracereplay.ai.openai_api_key');
-        $model  = config('tracereplay.ai.model', 'gpt-4o');
+        $model = config('tracereplay.ai.model', 'gpt-4o');
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return null;
         }
 
         $response = Http::withToken($apiKey)
             ->timeout(60)
             ->post('https://api.openai.com/v1/chat/completions', [
-                'model'    => $model,
+                'model' => $model,
                 'messages' => [
                     ['role' => 'user', 'content' => $prompt],
                 ],
@@ -106,4 +105,3 @@ class AiPromptService
         return null;
     }
 }
-

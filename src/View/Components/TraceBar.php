@@ -13,7 +13,7 @@ class TraceBar extends Component
 
     public function render()
     {
-        if (!$this->show || !config('tracereplay.enabled', true)) {
+        if (! $this->show || ! config('tracereplay.enabled', true)) {
             return '';
         }
 
@@ -24,4 +24,3 @@ class TraceBar extends Component
         ]);
     }
 }
-

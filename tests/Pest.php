@@ -11,4 +11,3 @@ use TraceReplay\Tests\TestCase;
 */
 
 uses(TestCase::class)->in('Feature');
-

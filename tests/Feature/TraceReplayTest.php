@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
-use TraceReplay\Console\Commands\PruneTracesCommand;
+use Illuminate\Support\Str;
 use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Models\Project;
 use TraceReplay\Models\Trace;
@@ -11,7 +11,9 @@ use TraceReplay\Models\Workspace;
 use TraceReplay\Services\AiPromptService;
 use TraceReplay\Services\NotificationService;
 use TraceReplay\Services\PayloadMasker;
-use TraceReplay\Services\ReplayService;
+use TraceReplay\TraceReplayManager;
+use TraceReplay\View\Components\TraceBar;
+
 // ── Core Lifecycle ────────────────────────────────────────────────────────────
 
 it('can start and end a trace', function () {
@@ -84,9 +86,9 @@ it('records error status when step throws an exception', function () {
 
     try {
         TraceReplay::step('Failing Step', function () {
-            throw new \RuntimeException('Intentional error');
+            throw new RuntimeException('Intentional error');
         });
-    } catch (\RuntimeException) {
+    } catch (RuntimeException) {
         // expected
     }
 
@@ -162,10 +164,11 @@ it('error_step accessor returns the first error step', function () {
     TraceReplay::step('OK Step', fn () => null);
 
     try {
-        TraceReplay::step('Bad Step', fn () => throw new \Exception('boom'));
-    } catch (\Exception) {}
+        TraceReplay::step('Bad Step', fn () => throw new Exception('boom'));
+    } catch (Exception) {
+    }
 
-    $trace     = TraceReplay::getCurrentTrace();
+    $trace = TraceReplay::getCurrentTrace();
     $errorStep = $trace->error_step;
 
     expect($errorStep)->not->toBeNull()
@@ -187,12 +190,12 @@ it('total_db_queries accessor sums step db_query_count', function () {
 it('PayloadMasker masks configured sensitive fields', function () {
     config(['tracereplay.mask_fields' => ['password', 'token']]);
 
-    $masker = new PayloadMasker();
+    $masker = new PayloadMasker;
     $result = $masker->mask([
         'username' => 'alice',
         'password' => 'supersecret',
-        'token'    => 'abc123',
-        'data'     => ['token' => 'nested_token'],
+        'token' => 'abc123',
+        'data' => ['token' => 'nested_token'],
     ]);
 
     expect($result['username'])->toBe('alice')
@@ -207,12 +210,13 @@ it('AiPromptService generates a prompt for a failed trace', function () {
     TraceReplay::start('AI Prompt Test');
 
     try {
-        TraceReplay::step('Broken Step', fn () => throw new \Exception('DB connection failed'));
-    } catch (\Exception) {}
+        TraceReplay::step('Broken Step', fn () => throw new Exception('DB connection failed'));
+    } catch (Exception) {
+    }
 
     TraceReplay::end('error');
 
-    $trace  = Trace::latest()->first();
+    $trace = Trace::latest()->first();
     $prompt = app(AiPromptService::class)->generateFixPrompt($trace->load('steps'));
 
     expect($prompt)->toContain('Broken Step')
@@ -224,7 +228,7 @@ it('AiPromptService returns a no-error message for successful traces', function 
     TraceReplay::start('Success Trace');
     TraceReplay::end('success');
 
-    $trace  = Trace::latest()->first();
+    $trace = Trace::latest()->first();
     $prompt = app(AiPromptService::class)->generateFixPrompt($trace->load('steps'));
 
     expect($prompt)->toContain('successfully with no errors recorded');
@@ -238,8 +242,8 @@ it('tracereplay:prune deletes old traces', function () {
     Trace::factory()->create(['started_at' => now()->subDays(1)]);
 
     $this->artisan('tracereplay:prune', ['--days' => 30])
-         ->expectsOutput('Deleted 2 trace(s) older than 30 day(s).')
-         ->assertExitCode(0);
+        ->expectsOutput('Deleted 2 trace(s) older than 30 day(s).')
+        ->assertExitCode(0);
 
     expect(Trace::count())->toBe(1);
 });
@@ -248,7 +252,7 @@ it('tracereplay:prune dry-run does not delete traces', function () {
     Trace::factory()->create(['started_at' => now()->subDays(60)]);
 
     $this->artisan('tracereplay:prune', ['--days' => 30, '--dry-run' => true])
-         ->assertExitCode(0);
+        ->assertExitCode(0);
 
     expect(Trace::count())->toBe(1);
 });
@@ -257,7 +261,7 @@ it('tracereplay:export outputs JSON for a trace', function () {
     $trace = Trace::factory()->create(['name' => 'Exportable Trace']);
 
     $this->artisan('tracereplay:export', ['id' => $trace->id, '--format' => 'json'])
-         ->assertExitCode(0);
+        ->assertExitCode(0);
 });
 
 // ── Export CSV ────────────────────────────────────────────────────────────────
@@ -266,19 +270,19 @@ it('tracereplay:export outputs CSV for a trace', function () {
     $trace = Trace::factory()->create(['name' => 'CSV, with "commas"']);
 
     $this->artisan('tracereplay:export', ['id' => $trace->id, '--format' => 'csv'])
-         ->assertExitCode(0);
+        ->assertExitCode(0);
 });
 
 it('tracereplay:export rejects unsupported format', function () {
     $trace = Trace::factory()->create();
 
     $this->artisan('tracereplay:export', ['id' => $trace->id, '--format' => 'xml'])
-         ->assertExitCode(1);
+        ->assertExitCode(1);
 });
 
 it('tracereplay:export returns failure for nonexistent trace', function () {
     $this->artisan('tracereplay:export', ['id' => 'nonexistent-id'])
-         ->assertExitCode(1);
+        ->assertExitCode(1);
 });
 
 it('tracereplay:export filters by status', function () {
@@ -286,14 +290,14 @@ it('tracereplay:export filters by status', function () {
     Trace::factory()->create(['status' => 'error']);
 
     $this->artisan('tracereplay:export', ['--status' => 'error', '--format' => 'json'])
-         ->assertExitCode(0);
+        ->assertExitCode(0);
 });
 
 // ── Prune Command Extra ──────────────────────────────────────────────────────
 
 it('tracereplay:prune rejects zero days', function () {
     $this->artisan('tracereplay:prune', ['--days' => 0])
-         ->assertExitCode(1);
+        ->assertExitCode(1);
 });
 
 it('tracereplay:prune filters by status', function () {
@@ -301,7 +305,7 @@ it('tracereplay:prune filters by status', function () {
     Trace::factory()->create(['started_at' => now()->subDays(60), 'status' => 'error']);
 
     $this->artisan('tracereplay:prune', ['--days' => 30, '--status' => 'success'])
-         ->assertExitCode(0);
+        ->assertExitCode(0);
 
     expect(Trace::count())->toBe(1)
         ->and(Trace::first()->status)->toBe('error');
@@ -309,8 +313,8 @@ it('tracereplay:prune filters by status', function () {
 
 it('tracereplay:prune shows no-op when no traces match', function () {
     $this->artisan('tracereplay:prune', ['--days' => 30])
-         ->expectsOutput('No traces found matching the criteria.')
-         ->assertExitCode(0);
+        ->expectsOutput('No traces found matching the criteria.')
+        ->assertExitCode(0);
 });
 
 // ── Dashboard Controller ─────────────────────────────────────────────────────
@@ -414,8 +418,9 @@ it('MCP get context returns trace details', function () {
 it('MCP generate fix prompt returns prompt', function () {
     TraceReplay::start('MCP Prompt Test');
     try {
-        TraceReplay::step('Fail', fn () => throw new \Exception('mcp error'));
-    } catch (\Exception) {}
+        TraceReplay::step('Fail', fn () => throw new Exception('mcp error'));
+    } catch (Exception) {
+    }
     TraceReplay::end('error');
 
     $trace = Trace::latest()->first();
@@ -432,7 +437,7 @@ it('MCP RPC list_traces method works', function () {
     $response = $this->postJson('/api/tracereplay/mcp', [
         'method' => 'list_traces',
         'params' => [],
-        'id'     => 1,
+        'id' => 1,
     ]);
 
     $response->assertOk();
@@ -444,7 +449,7 @@ it('MCP RPC returns error for unknown method', function () {
     $response = $this->postJson('/api/tracereplay/mcp', [
         'method' => 'unknown_method',
         'params' => [],
-        'id'     => 42,
+        'id' => 42,
     ]);
 
     $response->assertOk();
@@ -459,7 +464,7 @@ it('MCP RPC get_trace_context method works', function () {
     $response = $this->postJson('/api/tracereplay/mcp', [
         'method' => 'get_trace_context',
         'params' => ['trace_id' => $trace->id],
-        'id'     => 2,
+        'id' => 2,
     ]);
 
     $response->assertOk();
@@ -469,8 +474,9 @@ it('MCP RPC get_trace_context method works', function () {
 it('MCP RPC generate_fix_prompt method works', function () {
     TraceReplay::start('RPC Prompt');
     try {
-        TraceReplay::step('Err', fn () => throw new \Exception('rpc fail'));
-    } catch (\Exception) {}
+        TraceReplay::step('Err', fn () => throw new Exception('rpc fail'));
+    } catch (Exception) {
+    }
     TraceReplay::end('error');
 
     $trace = Trace::latest()->first();
@@ -478,7 +484,7 @@ it('MCP RPC generate_fix_prompt method works', function () {
     $response = $this->postJson('/api/tracereplay/mcp', [
         'method' => 'generate_fix_prompt',
         'params' => ['trace_id' => $trace->id],
-        'id'     => 3,
+        'id' => 3,
     ]);
 
     $response->assertOk();
@@ -605,7 +611,7 @@ it('TraceStep belongs to a trace', function () {
     TraceReplay::start('Relation Test');
     TraceReplay::step('Step', fn () => null);
 
-    $step  = TraceStep::first();
+    $step = TraceStep::first();
     $trace = $step->trace;
 
     expect($trace)->toBeInstanceOf(Trace::class);
@@ -614,8 +620,8 @@ it('TraceStep belongs to a trace', function () {
 // ── Workspace & Project Models ───────────────────────────────────────────────
 
 it('Workspace has many projects', function () {
-    $workspace = Workspace::create(['id' => \Illuminate\Support\Str::uuid(), 'name' => 'Test WS']);
-    $project   = Project::create(['id' => \Illuminate\Support\Str::uuid(), 'workspace_id' => $workspace->id, 'name' => 'Test Proj']);
+    $workspace = Workspace::create(['id' => Str::uuid(), 'name' => 'Test WS']);
+    $project = Project::create(['id' => Str::uuid(), 'workspace_id' => $workspace->id, 'name' => 'Test Proj']);
 
     expect($workspace->projects)->toHaveCount(1)
         ->and($workspace->projects->first()->name)->toBe('Test Proj')
@@ -623,8 +629,8 @@ it('Workspace has many projects', function () {
 });
 
 it('Project has many traces', function () {
-    $workspace = Workspace::create(['id' => \Illuminate\Support\Str::uuid(), 'name' => 'WS']);
-    $project   = Project::create(['id' => \Illuminate\Support\Str::uuid(), 'workspace_id' => $workspace->id, 'name' => 'Proj']);
+    $workspace = Workspace::create(['id' => Str::uuid(), 'name' => 'WS']);
+    $project = Project::create(['id' => Str::uuid(), 'workspace_id' => $workspace->id, 'name' => 'Proj']);
 
     Trace::factory()->create(['project_id' => $project->id]);
     Trace::factory()->create(['project_id' => $project->id]);
@@ -633,8 +639,8 @@ it('Project has many traces', function () {
 });
 
 it('Trace belongs to a project', function () {
-    $workspace = Workspace::create(['id' => \Illuminate\Support\Str::uuid(), 'name' => 'WS']);
-    $project   = Project::create(['id' => \Illuminate\Support\Str::uuid(), 'workspace_id' => $workspace->id, 'name' => 'My Project']);
+    $workspace = Workspace::create(['id' => Str::uuid(), 'name' => 'WS']);
+    $project = Project::create(['id' => Str::uuid(), 'workspace_id' => $workspace->id, 'name' => 'My Project']);
 
     $trace = Trace::factory()->create(['project_id' => $project->id]);
 
@@ -672,8 +678,9 @@ it('completion_percentage calculates correctly for error trace with steps', func
     TraceReplay::step('Step 1', fn () => null);
     TraceReplay::step('Step 2', fn () => null);
     try {
-        TraceReplay::step('Step 3', fn () => throw new \Exception('fail'));
-    } catch (\Exception) {}
+        TraceReplay::step('Step 3', fn () => throw new Exception('fail'));
+    } catch (Exception) {
+    }
     TraceReplay::end('error');
 
     $trace = Trace::latest()->first();
@@ -684,7 +691,7 @@ it('completion_percentage calculates correctly for error trace with steps', func
 // ── PayloadMasker Edge Cases ─────────────────────────────────────────────────
 
 it('PayloadMasker returns non-array values unchanged', function () {
-    $masker = new PayloadMasker();
+    $masker = new PayloadMasker;
 
     expect($masker->mask('string'))->toBe('string')
         ->and($masker->mask(42))->toBe(42)
@@ -693,7 +700,7 @@ it('PayloadMasker returns non-array values unchanged', function () {
 
 it('PayloadMasker is case-insensitive', function () {
     config(['tracereplay.mask_fields' => ['Authorization']]);
-    $masker = new PayloadMasker();
+    $masker = new PayloadMasker;
 
     $result = $masker->mask(['AUTHORIZATION' => 'Bearer xyz', 'name' => 'test']);
 
@@ -708,15 +715,15 @@ it('NotificationService sends mail on failure', function () {
     // Instead, spy on the facade to verify it was called.
     Mail::shouldReceive('raw')
         ->once()
-        ->withArgs(function (string $body, \Closure $callback) {
+        ->withArgs(function (string $body, Closure $callback) {
             // Verify the body contains the trace name
             return str_contains($body, 'Notified Trace');
         });
 
     config([
         'tracereplay.notifications.on_failure' => true,
-        'tracereplay.notifications.channels'   => ['mail'],
-        'tracereplay.notifications.mail.to'    => 'test@example.com',
+        'tracereplay.notifications.channels' => ['mail'],
+        'tracereplay.notifications.mail.to' => 'test@example.com',
     ]);
 
     $trace = Trace::factory()->create(['status' => 'error', 'name' => 'Notified Trace']);
@@ -730,7 +737,7 @@ it('NotificationService skips mail when no recipient configured', function () {
 
     config([
         'tracereplay.notifications.channels' => ['mail'],
-        'tracereplay.notifications.mail.to'  => null,
+        'tracereplay.notifications.mail.to' => null,
     ]);
 
     $trace = Trace::factory()->create(['status' => 'error']);
@@ -743,8 +750,8 @@ it('NotificationService sends slack notification', function () {
     Http::fake(['*' => Http::response([], 200)]);
 
     config([
-        'tracereplay.notifications.channels'          => ['slack'],
-        'tracereplay.notifications.slack.webhook_url'  => 'https://hooks.slack.test/webhook',
+        'tracereplay.notifications.channels' => ['slack'],
+        'tracereplay.notifications.slack.webhook_url' => 'https://hooks.slack.test/webhook',
     ]);
 
     $trace = Trace::factory()->create(['status' => 'error', 'name' => 'Slack Trace']);
@@ -757,7 +764,7 @@ it('NotificationService skips slack when no webhook configured', function () {
     Http::fake();
 
     config([
-        'tracereplay.notifications.channels'         => ['slack'],
+        'tracereplay.notifications.channels' => ['slack'],
         'tracereplay.notifications.slack.webhook_url' => null,
     ]);
 
@@ -826,7 +833,7 @@ it('context() returns the manager for chaining', function () {
 
     $result = app('tracereplay')->context(['x' => 1]);
 
-    expect($result)->toBeInstanceOf(\TraceReplay\TraceReplayManager::class);
+    expect($result)->toBeInstanceOf(TraceReplayManager::class);
 });
 
 // ── Duration Precision ──────────────────────────────────────────────────────
@@ -850,7 +857,7 @@ it('tracereplay:export fails on invalid output directory', function () {
     $trace = Trace::factory()->create();
 
     $this->artisan('tracereplay:export', [
-        'id'       => $trace->id,
+        'id' => $trace->id,
         '--format' => 'json',
         '--output' => '/nonexistent/dir/trace.json',
     ])->assertExitCode(1);
@@ -860,7 +867,7 @@ it('tracereplay:export fails on invalid output directory', function () {
 
 it('tracereplay:prune rejects invalid status', function () {
     $this->artisan('tracereplay:prune', ['--days' => 30, '--status' => 'invalid'])
-         ->assertExitCode(1);
+        ->assertExitCode(1);
 });
 
 // ── Dashboard — invalid status ignored ─────────────────────────────────────
@@ -891,8 +898,9 @@ it('dashboard replay endpoint returns error for trace without request payload', 
 it('dashboard AI prompt endpoint works for error trace', function () {
     TraceReplay::start('AI Dashboard Test');
     try {
-        TraceReplay::step('Fail', fn () => throw new \Exception('prompt test error'));
-    } catch (\Exception) {}
+        TraceReplay::step('Fail', fn () => throw new Exception('prompt test error'));
+    } catch (Exception) {
+    }
     TraceReplay::end('error');
 
     $trace = Trace::latest()->first();
@@ -946,15 +954,15 @@ it('AiPromptService callOpenAI returns null on API failure', function () {
 it('TraceBar renders empty when disabled', function () {
     config(['tracereplay.enabled' => false]);
 
-    $component = new \TraceReplay\View\Components\TraceBar();
-    $result    = $component->render();
+    $component = new TraceBar;
+    $result = $component->render();
 
     expect($result)->toBe('');
 });
 
 it('TraceBar renders empty when show is false', function () {
-    $component = new \TraceReplay\View\Components\TraceBar(show: false);
-    $result    = $component->render();
+    $component = new TraceBar(show: false);
+    $result = $component->render();
 
     expect($result)->toBe('');
 });
@@ -962,11 +970,11 @@ it('TraceBar renders empty when show is false', function () {
 // ── Export Command — output to file ─────────────────────────────────────────
 
 it('tracereplay:export writes to output file', function () {
-    $trace   = Trace::factory()->create(['name' => 'File Export']);
+    $trace = Trace::factory()->create(['name' => 'File Export']);
     $tmpFile = tempnam(sys_get_temp_dir(), 'tr_export_');
 
     $this->artisan('tracereplay:export', [
-        'id'       => $trace->id,
+        'id' => $trace->id,
         '--format' => 'json',
         '--output' => $tmpFile,
     ])->assertExitCode(0);
@@ -981,25 +989,25 @@ it('tracereplay:export writes to output file', function () {
 
 it('tracereplay:export rejects invalid status', function () {
     $this->artisan('tracereplay:export', ['--status' => 'invalid', '--format' => 'json'])
-         ->assertExitCode(1);
+        ->assertExitCode(1);
 });
 
 // ── AiPromptService — null duration_ms ────────────────────────────────────
 
 it('AiPromptService handles null duration_ms without crash', function () {
     $trace = Trace::factory()->create([
-        'status'      => 'error',
+        'status' => 'error',
         'duration_ms' => null,
     ]);
 
     // Create a step with error to trigger the prompt path
     TraceStep::create([
-        'trace_id'     => $trace->id,
-        'label'        => 'Broken',
-        'status'       => 'error',
+        'trace_id' => $trace->id,
+        'label' => 'Broken',
+        'status' => 'error',
         'error_reason' => 'test error',
-        'step_order'   => 1,
-        'duration_ms'  => 0,
+        'step_order' => 1,
+        'duration_ms' => 0,
     ]);
 
     $prompt = app(AiPromptService::class)->generateFixPrompt($trace->load('steps'));
@@ -1021,12 +1029,12 @@ it('NotificationService handles null duration_ms in mail', function () {
 
     config([
         'tracereplay.notifications.channels' => ['mail'],
-        'tracereplay.notifications.mail.to'  => 'test@example.com',
+        'tracereplay.notifications.mail.to' => 'test@example.com',
     ]);
 
     $trace = Trace::factory()->create([
-        'status'      => 'error',
-        'name'        => 'Null Duration',
+        'status' => 'error',
+        'name' => 'Null Duration',
         'duration_ms' => null,
     ]);
 
@@ -1037,19 +1045,18 @@ it('NotificationService handles null duration_ms in slack', function () {
     Http::fake(['*' => Http::response([], 200)]);
 
     config([
-        'tracereplay.notifications.channels'         => ['slack'],
+        'tracereplay.notifications.channels' => ['slack'],
         'tracereplay.notifications.slack.webhook_url' => 'https://hooks.slack.test/webhook',
     ]);
 
     $trace = Trace::factory()->create([
-        'status'      => 'error',
+        'status' => 'error',
         'duration_ms' => null,
     ]);
 
     app(NotificationService::class)->notifyFailure($trace);
 
-    Http::assertSent(fn ($request) =>
-        str_contains(json_encode($request->data()), '0 ms')
+    Http::assertSent(fn ($request) => str_contains(json_encode($request->data()), '0 ms')
     );
 });
 
@@ -1061,7 +1068,7 @@ it('MCP RPC trigger_replay returns error for trace without payload', function ()
     $response = $this->postJson('/api/tracereplay/mcp', [
         'method' => 'trigger_replay',
         'params' => ['trace_id' => $trace->id],
-        'id'     => 10,
+        'id' => 10,
     ]);
 
     $response->assertOk();

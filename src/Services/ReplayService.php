@@ -18,22 +18,22 @@ class ReplayService
             ->first()
             ?? $trace->steps()->whereNotNull('request_payload')->first();
 
-        if (!$initialStep || empty($initialStep->request_payload)) {
-            throw new \Exception("Cannot replay trace: No request payload found on any step.");
+        if (! $initialStep || empty($initialStep->request_payload)) {
+            throw new \Exception('Cannot replay trace: No request payload found on any step.');
         }
 
-        $payload   = $initialStep->request_payload;
-        $method    = strtoupper($payload['method'] ?? 'GET');
-        $uri       = $payload['uri'] ?? '/';
-        $headers   = $payload['headers'] ?? [];
-        $body      = $payload['body'] ?? [];
-        $query     = $payload['query'] ?? [];
+        $payload = $initialStep->request_payload;
+        $method = strtoupper($payload['method'] ?? 'GET');
+        $uri = $payload['uri'] ?? '/';
+        $headers = $payload['headers'] ?? [];
+        $body = $payload['body'] ?? [];
+        $query = $payload['query'] ?? [];
 
         // Remove host headers so they don't interfere with the target
         unset($headers['host'], $headers['Host']);
 
-        $baseUrl   = $overrideUrl ?? config('tracereplay.replay.default_base_url');
-        $targetUrl = rtrim($baseUrl, '/') . '/' . ltrim($uri, '/');
+        $baseUrl = $overrideUrl ?? config('tracereplay.replay.default_base_url');
+        $targetUrl = rtrim($baseUrl, '/').'/'.ltrim($uri, '/');
 
         // Symfony normalises all header names to lowercase, so 'Content-Type' never exists
         // in the stored headers array — only 'content-type' does.
@@ -47,20 +47,20 @@ class ReplayService
         $replayBody = $response->json() ?? $response->body();
 
         $replayResponsePayload = $this->masker->mask([
-            'status'  => $response->status(),
+            'status' => $response->status(),
             'headers' => $response->headers(),
-            'body'    => $replayBody,
+            'body' => $replayBody,
         ]);
 
         $originalResponsePayload = $this->masker->mask($initialStep->response_payload ?? []);
 
         $originalBody = $originalResponsePayload['body'] ?? $originalResponsePayload;
-        $replayBody2  = $replayResponsePayload['body']   ?? $replayResponsePayload;
+        $replayBody2 = $replayResponsePayload['body'] ?? $replayResponsePayload;
 
         return [
             'original' => $originalResponsePayload,
-            'replay'   => $replayResponsePayload,
-            'diff'     => (\is_array($originalBody) && \is_array($replayBody2))
+            'replay' => $replayResponsePayload,
+            'diff' => (\is_array($originalBody) && \is_array($replayBody2))
                 ? $this->generateDiff($originalBody, $replayBody2)
                 : ['status' => $originalBody === $replayBody2 ? 'unchanged' : 'changed', 'original' => $originalBody, 'replay' => $replayBody2],
         ];
@@ -70,9 +70,9 @@ class ReplayService
     {
         // Simple manual structural diffing
         $diff = [];
-        
+
         foreach ($original as $key => $value) {
-            if (!array_key_exists($key, $replay)) {
+            if (! array_key_exists($key, $replay)) {
                 $diff[$key] = ['status' => 'removed', 'original' => $value];
             } elseif ($replay[$key] !== $value) {
                 if (is_array($value) && is_array($replay[$key])) {
@@ -86,7 +86,7 @@ class ReplayService
         }
 
         foreach ($replay as $key => $value) {
-            if (!array_key_exists($key, $original)) {
+            if (! array_key_exists($key, $original)) {
                 $diff[$key] = ['status' => 'added', 'replay' => $value];
             }
         }
