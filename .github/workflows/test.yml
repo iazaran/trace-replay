@@ -20,7 +20,9 @@ jobs:
           # Laravel 10 requires PHP ^8.1 and is NOT compatible with PHP 8.4
           - php: '8.4'
             laravel: '10.*'
-          # Laravel 13 requires PHP ^8.2 — all covered, no additional excludes needed
+          # Laravel 13 requires PHP ^8.3+
+          - php: '8.2'
+            laravel: '13.*'
 
     name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }}
 
