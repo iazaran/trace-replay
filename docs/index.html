@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TraceReplay - High-Fidelity Process Tracking for Laravel</title>
+    <meta name="description" content="TraceReplay is a high-fidelity process tracking, deterministic replay, and AI debugging package for Laravel. Get unmatched visibility into your application state.">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="TraceReplay - Laravel Debugging Engine">
+    <meta property="og:description" content="A powerful Laravel package for process tracking, request replay, and AI debugging.">
+    <meta property="og:type" content="website">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=General+Sans:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['General Sans', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                        },
+                        dark: {
+                            900: '#09090b',
+                            800: '#18181b',
+                            700: '#27272a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Syntax Highlighting (Highlight.js) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark-reasonable.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/php.min.js"></script>
+
+    <style>
+        body { background-color: #09090b; color: #e4e4e7; }
+        .glass-header { 
+            background: rgba(9, 9, 11, 0.8); 
+            backdrop-filter: blur(12px); 
+            border-bottom: 1px solid rgba(255,255,255,0.05); 
+        }
+        
+        /* Typography overrides */
+        .prose h1, .prose h2, .prose h3 { color: #ffffff; font-weight: 600; scroll-margin-top: 6rem; }
+        .prose h2 { margin-top: 3rem; margin-bottom: 1rem; border-bottom: 1px solid #27272a; padding-bottom: 0.5rem; }
+        .prose h3 { margin-top: 2rem; margin-bottom: 0.75rem; }
+        .prose p { margin-bottom: 1.25rem; line-height: 1.7; color: #a1a1aa; }
+        .prose a { color: #818cf8; text-decoration: none; transition: color 0.2s; }
+        .prose a:hover { color: #a5b4fc; }
+        .prose ul, .prose ol { margin-bottom: 1.25rem; padding-left: 1.5rem; color: #a1a1aa; list-style-type: disc; }
+        .prose li { margin-bottom: 0.5rem; }
+        
+        .prose code { 
+            background: #18181b; 
+            padding: 0.2rem 0.4rem; 
+            border-radius: 0.25rem; 
+            font-size: 0.875rem; 
+            color: #d4d4d8;
+            font-family: 'Fira Code', monospace;
+            border: 1px solid #27272a;
+        }
+        .prose pre { 
+            background: #18181b; 
+            padding: 1.25rem; 
+            border-radius: 0.5rem; 
+            overflow-x: auto; 
+            margin-bottom: 1.5rem;
+            border: 1px solid #27272a;
+        }
+        .prose pre code { background: transparent; padding: 0; border: none; color: inherit; }
+
+        .prose table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 0.875rem; }
+        .prose th { background: #18181b; color: #e4e4e7; padding: 0.6rem 1rem; text-align: left; border: 1px solid #27272a; }
+        .prose td { padding: 0.5rem 1rem; border: 1px solid #27272a; color: #a1a1aa; }
+        .prose tr:nth-child(even) td { background: #18181b; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #09090b; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Header -->
+    <header class="glass-header fixed top-0 w-full z-50">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                </div>
+                <span class="font-semibold text-lg text-white">TraceReplay</span>
+            </div>
+            <nav class="hidden md:flex gap-6 text-sm font-medium">
+                <a href="#introduction" class="text-zinc-400 hover:text-white transition">Docs</a>
+                <a href="#installation" class="text-zinc-400 hover:text-white transition">Install</a>
+                <a href="#api-reference" class="text-zinc-400 hover:text-white transition">API</a>
+                <a href="https://github.com/iazaran/tracereplay" target="_blank" class="text-zinc-400 hover:text-white transition">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="max-w-7xl mx-auto px-6 pt-24 pb-16 flex flex-col md:flex-row gap-12">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="md:w-64 shrink-0 hidden md:block">
+            <div class="sticky top-28 pl-2">
+                <ul class="space-y-3 text-sm">
+                    <li><a href="#introduction" class="block text-zinc-400 hover:text-white transition">Introduction</a></li>
+                    <li><a href="#installation" class="block text-zinc-400 hover:text-white transition">Installation</a></li>
+                    <li><a href="#configuration" class="block text-zinc-400 hover:text-white transition">Configuration</a></li>
+                    <li>
+                        <span class="block text-zinc-200 font-semibold mt-6 mb-2">Usage</span>
+                        <ul class="space-y-3 border-l border-zinc-800 ml-1 pl-4 mt-2">
+                            <li><a href="#manual-tracing" class="block text-zinc-400 hover:text-white transition">Manual Tracing</a></li>
+                            <li><a href="#api-reference" class="block text-zinc-400 hover:text-white transition">API Reference</a></li>
+                            <li><a href="#http-ingestion" class="block text-zinc-400 hover:text-white transition">HTTP Ingestion</a></li>
+                            <li><a href="#auto-tracing" class="block text-zinc-400 hover:text-white transition">Auto Tracing</a></li>
+                            <li><a href="#dashboard" class="block text-zinc-400 hover:text-white transition">The Dashboard</a></li>
+                            <li><a href="#security" class="block text-zinc-400 hover:text-white transition">Security</a></li>
+                            <li><a href="#replay-engine" class="block text-zinc-400 hover:text-white transition">Replay Engine</a></li>
+                            <li><a href="#ai-debugging" class="block text-zinc-400 hover:text-white transition">AI Debugging</a></li>
+                            <li><a href="#data-masking" class="block text-zinc-400 hover:text-white transition">Data Masking</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#mcp-api" class="block text-zinc-400 hover:text-white transition mt-4">MCP Agent API</a></li>
+                    <li><a href="#retention" class="block text-zinc-400 hover:text-white transition">Data Retention</a></li>
+                    <li><a href="#testing" class="block text-zinc-400 hover:text-white transition">Testing</a></li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Content -->
+        <main class="prose max-w-3xl flex-grow" id="content-area">
+
+            <h1 id="introduction" class="text-4xl">TraceReplay Documentation</h1>
+            <p class="text-xl text-zinc-300">High-fidelity process tracking, deterministic replay, and AI debugging for Laravel — production &amp; enterprise ready.</p>
+            <p>TraceReplay is not a standard error logger. It is a full-fledged <strong>execution tracer</strong> that captures every step of your complex workflows, reconstructs them with a waterfall timeline, and offers one-click AI debugging when things go wrong. It supports Laravel 10, 11, 12, and 13.</p>
+
+            <h2 id="installation">Installation</h2>
+            <pre><code class="language-bash">composer require iazaran/tracereplay</code></pre>
+            <p>Publish config and migrations:</p>
+            <pre><code class="language-bash">php artisan vendor:publish --tag=tracereplay-config
+php artisan vendor:publish --tag=tracereplay-migrations</code></pre>
+            <pre><code class="language-bash">php artisan migrate</code></pre>
+            <p>Migrations use <code>json</code> columns for full MySQL, MariaDB, PostgreSQL, and SQLite compatibility.</p>
+
+            <h3>Publishing Views (Recommended)</h3>
+            <p>TraceReplay ships with a polished, dark-themed dashboard featuring a waterfall timeline, syntax-highlighted JSON inspector, and live stats — all styled and ready to use out of the box. Publishing the views lets you customise the layout, colours, or add your own branding:</p>
+            <pre><code class="language-bash">php artisan vendor:publish --tag=tracereplay-views</code></pre>
+            <p>This copies the Blade templates to <code>resources/views/vendor/tracereplay/</code> where you can edit them freely. The package will automatically use your published versions instead of its built-in views.</p>
+
+            <h2 id="configuration">Configuration</h2>
+            <p>Key options in <code>config/tracereplay.php</code>:</p>
+            <pre><code class="language-php">return [
+    'enabled'          => env('TRACEREPLAY_ENABLED', true),
+    'sample_rate'      => env('TRACEREPLAY_SAMPLE_RATE', 1.0), // 0.1 = 10% of requests
+    'project_id'       => env('TRACEREPLAY_PROJECT_ID', null),
+    'mask_fields'      => ['password', 'password_confirmation', 'token', 'api_key',
+                           'authorization', 'secret', 'credit_card', 'cvv', 'ssn', 'private_key'],
+    'track_db_queries' => env('TRACEREPLAY_TRACK_DB', true),
+    'middleware'        => ['web'],           // add 'auth', 'can:...' for production
+    'api_middleware'    => ['api'],
+    'allowed_ips'      => array_filter(explode(',', env('TRACEREPLAY_ALLOWED_IPS', ''))),
+    'queue' => [
+        'enabled'    => env('TRACEREPLAY_QUEUE_ENABLED', false),
+        'connection' => env('TRACEREPLAY_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
+        'queue'      => env('TRACEREPLAY_QUEUE_NAME', 'default'),
+    ],
+    'replay' => [
+        'default_base_url' => env('TRACEREPLAY_REPLAY_URL', env('APP_URL')),
+        'timeout'          => env('TRACEREPLAY_REPLAY_TIMEOUT', 30),
+    ],
+    'retention_days' => env('TRACEREPLAY_RETENTION_DAYS', 30),
+    'notifications' => [
+        'on_failure'  => env('TRACEREPLAY_NOTIFY_ON_FAILURE', false),
+        'channels'    => ['mail'],
+        'mail'        => ['to' => env('TRACEREPLAY_NOTIFY_EMAIL')],
+        'slack'       => ['webhook_url' => env('TRACEREPLAY_SLACK_WEBHOOK')],
+    ],
+    'ai' => [
+        'openai_api_key' => env('TRACEREPLAY_OPENAI_KEY'),
+        'model'          => env('TRACEREPLAY_OPENAI_MODEL', 'gpt-4o'),
+    ],
+    'auto_trace' => [
+        'jobs'     => env('TRACEREPLAY_AUTO_TRACE_JOBS', true),
+        'commands' => env('TRACEREPLAY_AUTO_TRACE_COMMANDS', false),
+        'exclude_commands' => ['queue:work', 'queue:listen', 'horizon', 'schedule:run',
+                               'schedule:work', 'tracereplay:prune', 'tracereplay:export'],
+    ],
+];</code></pre>
+
+            <h2 id="manual-tracing">Manual Tracing</h2>
+            <p>Wrap any complex logic in <code>TraceReplay::step()</code>. Each callback's return value is passed through transparently.</p>
+            <pre><code class="language-php">use TraceReplay\Facades\TraceReplay;
+
+class BookingService
+{
+    public function handleBooking(array $payload): void
+    {
+        TraceReplay::start('Flight Booking', ['channel' => 'web']);
+
+        try {
+            $inventory = TraceReplay::step('Validate Inventory', function () use ($payload) {
+                return Inventory::check($payload['flight_id']);
+            });
+
+            TraceReplay::checkpoint('Inventory OK', ['seats' => $inventory->seats]);
+
+            TraceReplay::context(['user_tier' => auth()->user()->tier]);
+
+            TraceReplay::step('Charge Credit Card', function () use ($payload) {
+                return PaymentGateway::charge($payload['amount']);
+            });
+
+            TraceReplay::end('success');
+        } catch (\Exception $e) {
+            TraceReplay::end('error');
+            throw $e;
+        }
+    }
+}</code></pre>
+
+            <h2 id="api-reference">API Reference</h2>
+            <table>
+                <thead><tr><th>Method</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr><td><code>TraceReplay::start(name, tags[])</code></td><td>Start a new trace; returns <code>Trace</code> or <code>null</code></td></tr>
+                    <tr><td><code>TraceReplay::step(label, callable, extra[])</code></td><td>Wrap callable — records timing, memory, DB queries, errors</td></tr>
+                    <tr><td><code>TraceReplay::measure(label, callable)</code></td><td>Alias for <code>step()</code> — semantic clarity for benchmarks</td></tr>
+                    <tr><td><code>TraceReplay::checkpoint(label, state[])</code></td><td>Zero-overhead breadcrumb (no callable)</td></tr>
+                    <tr><td><code>TraceReplay::context(array)</code></td><td>Merge data into the next step's <code>state_snapshot</code></td></tr>
+                    <tr><td><code>TraceReplay::end(status)</code></td><td>Finalise trace; status: <code>'success'</code> or <code>'error'</code></td></tr>
+                    <tr><td><code>TraceReplay::getCurrentTrace()</code></td><td>Returns the active <code>Trace</code> model or <code>null</code></td></tr>
+                </tbody>
+            </table>
+
+            <h2 id="http-ingestion">HTTP Auto Ingestion</h2>
+            <p>Automatically trace every HTTP request. Add to <code>app/Http/Kernel.php</code>:</p>
+            <pre><code class="language-php">protected $middlewareGroups = [
+    'web' => [
+        // ...
+        \TraceReplay\Http\Middleware\TraceMiddleware::class,
+    ],
+];</code></pre>
+            <p>For Laravel 11+ (<code>bootstrap/app.php</code>):</p>
+            <pre><code class="language-php">->withMiddleware(function (Middleware $middleware) {
+    $middleware->append(\TraceReplay\Http\Middleware\TraceMiddleware::class);
+})</code></pre>
+
+            <h2 id="auto-tracing">Auto Tracing — Jobs &amp; Commands</h2>
+            <p>Queue jobs are automatically traced when <code>auto_trace.jobs</code> is enabled (default: <code>true</code>). No manual listener registration needed — the service provider wires everything up.</p>
+            <p>Artisan commands can be auto-traced by enabling <code>auto_trace.commands</code>:</p>
+            <pre><code class="language-bash">TRACEREPLAY_AUTO_TRACE_COMMANDS=true</code></pre>
+            <p>Internal commands like <code>queue:work</code>, <code>horizon</code>, and <code>tracereplay:prune</code> are excluded by default (see <code>auto_trace.exclude_commands</code>).</p>
+
+            <h2 id="dashboard">The Dashboard</h2>
+            <p>Navigate to <code>https://your-app.com/tracereplay</code>.</p>
+            <ul>
+                <li><strong>Waterfall timeline</strong> — visual duration bars relative to total trace time</li>
+                <li><strong>Live stats</strong> — auto-refreshing counters (total, failed, avg duration)</li>
+                <li><strong>Search &amp; filter</strong> — by name, IP, user ID; toggle failed-only</li>
+                <li><strong>Step inspector</strong> — syntax-highlighted JSON payloads and state snapshots</li>
+                <li><strong>Replay engine</strong> — re-run any HTTP step and view a structural JSON diff</li>
+                <li><strong>AI Fix Prompt</strong> — one-click prompt for Cursor, ChatGPT, or Claude</li>
+            </ul>
+
+            <h2 id="security">Security</h2>
+            <p>Add authentication or authorization middleware in <code>config/tracereplay.php</code>:</p>
+            <pre><code class="language-php">// config/tracereplay.php
+'middleware' => ['web', 'auth', 'can:view-tracereplay'],
+
+// AuthServiceProvider
+Gate::define('view-tracereplay', fn ($user) =>
+    in_array($user->email, ['admin@example.com'])
+);</code></pre>
+            <p>Or restrict by IP (exact match, comma-separated via env):</p>
+            <pre><code class="language-bash">TRACEREPLAY_ALLOWED_IPS=203.0.113.5,10.0.0.1</code></pre>
+
+            <h2 id="data-masking">Data Masking</h2>
+            <p>TraceReplay automatically redacts configured keys from all request/response payloads <em>before</em> they touch the database — including deeply nested values:</p>
+            <pre><code class="language-php">// config/tracereplay.php
+'mask_fields' => ['password', 'token', 'secret', 'api_key', 'credit_card'],
+
+// Input:  ['username' => 'alice', 'password' => 'hunter2']
+// Stored: ['username' => 'alice', 'password' => '********']</code></pre>
+
+            <h2 id="replay-engine">Replay Engine</h2>
+            <p>When an HTTP request fails, TraceReplay lets you <strong>deterministically replay</strong> it from the dashboard. The replay engine proxies the original request, captures the new response, and generates an exact <strong>structural JSON diff</strong>.</p>
+
+            <h2 id="ai-debugging">AI Debugging</h2>
+            <p>For any failed trace the dashboard shows an <strong>AI Fix Prompt</strong> button. It generates a structured markdown prompt containing:</p>
+            <ul>
+                <li>Full execution timeline with per-step timing and DB query stats</li>
+                <li>Exact error message, file, line number, and first 20 stack frames</li>
+                <li>Request/response payloads (sensitive fields masked)</li>
+                <li>Step-by-step state snapshots</li>
+            </ul>
+            <p>Configure <code>OPENAI_API_KEY</code> and click <strong>"Ask AI"</strong> to get an answer directly in the dashboard.</p>
+
+            <h2 id="mcp-api">MCP / AI-Agent JSON-RPC API</h2>
+            <p>Autonomous agents can query TraceReplay over JSON-RPC 2.0 at <code>POST /api/tracereplay/mcp</code>.</p>
+            <table>
+                <thead><tr><th>Method</th><th>Params</th><th>Returns</th></tr></thead>
+                <tbody>
+                    <tr><td><code>list_traces</code></td><td><code>limit</code>, <code>status</code></td><td>Array of trace summaries</td></tr>
+                    <tr><td><code>get_trace_context</code></td><td><code>trace_id</code></td><td>Full trace with steps</td></tr>
+                    <tr><td><code>generate_fix_prompt</code></td><td><code>trace_id</code></td><td>Markdown debugging prompt</td></tr>
+                    <tr><td><code>trigger_replay</code></td><td><code>trace_id</code></td><td>Replay result + JSON diff</td></tr>
+                </tbody>
+            </table>
+            <pre><code class="language-json">{
+  "jsonrpc": "2.0",
+  "method": "generate_fix_prompt",
+  "params": { "trace_id": "9b12f7e4-..." },
+  "id": 1
+}</code></pre>
+
+            <h2 id="retention">Data Retention</h2>
+            <p>Prune old traces automatically via the scheduler:</p>
+            <pre><code class="language-php">// app/Console/Kernel.php
+$schedule->command('tracereplay:prune --days=30')->daily();</code></pre>
+            <pre><code class="language-bash">php artisan tracereplay:prune --days=30 --dry-run       # preview
+php artisan tracereplay:prune --days=7 --status=error    # prune only error traces</code></pre>
+            <p>Export a trace for archiving:</p>
+            <pre><code class="language-bash">php artisan tracereplay:export {id} --format=json
+php artisan tracereplay:export {id} --format=csv
+php artisan tracereplay:export {id} --format=json --output=/tmp/trace.json
+php artisan tracereplay:export --status=error --format=json  # all error traces</code></pre>
+
+            <h2 id="testing">Testing</h2>
+            <pre><code class="language-bash">./vendor/bin/pest</code></pre>
+            <p>The test suite (90 tests, 183 assertions) covers the full engine lifecycle, model scopes &amp; accessors, payload masking, AI prompt &amp; notification services, dashboard UI, MCP JSON-RPC API, middleware (trace &amp; auth), replay engine, Artisan commands (prune &amp; export with validation), and Blade components — all using an in-memory SQLite database.</p>
+
+            <hr class="my-12 border-zinc-800">
+            <p class="text-sm text-center text-zinc-500">TraceReplay &copy; 2026 &mdash; MIT License</p>
+
+        </main>
+    </div>
+
+    <!-- Active Link Highlighting Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            hljs.highlightAll();
+
+            const sections = document.querySelectorAll('main h1[id], main h2[id]');
+            const navLinks = document.querySelectorAll('aside a[href^="#"]');
+
+            // Build a map from #hash → link element for exact matching
+            const linkMap = {};
+            navLinks.forEach(link => { linkMap[link.getAttribute('href')] = link; });
+
+            function updateActiveLink() {
+                // Find the last section whose top edge has scrolled past the threshold
+                let activeId = '';
+                const threshold = 140; // accounts for fixed header + a little breathing room
+
+                sections.forEach(section => {
+                    const rect = section.getBoundingClientRect();
+                    if (rect.top <= threshold) {
+                        activeId = section.getAttribute('id');
+                    }
+                });
+
+                navLinks.forEach(link => {
+                    link.classList.remove('text-white', 'font-medium');
+                    link.classList.add('text-zinc-400');
+                });
+
+                if (activeId && linkMap['#' + activeId]) {
+                    const active = linkMap['#' + activeId];
+                    active.classList.remove('text-zinc-400');
+                    active.classList.add('text-white', 'font-medium');
+                }
+            }
+
+            window.addEventListener('scroll', updateActiveLink, { passive: true });
+            updateActiveLink(); // set initial state on load
+        });
+    </script>
+</body>
+</html>
