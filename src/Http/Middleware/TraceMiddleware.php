@@ -12,18 +12,18 @@ class TraceMiddleware
 {
     public function handle(Request $request, Closure $next): SymfonyResponse
     {
-        if (! config('tracereplay.enabled')) {
+        if (! config('trace-replay.enabled')) {
             return $next($request);
         }
 
         // Respect sampling rate
-        $sampleRate = (float) config('tracereplay.sample_rate', 1.0);
+        $sampleRate = (float) config('trace-replay.sample_rate', 1.0);
         if ($sampleRate < 1.0 && mt_rand() / mt_getrandmax() > $sampleRate) {
             return $next($request);
         }
 
-        // Skip tracereplay dashboard routes to avoid recursive tracing
-        if (str_starts_with($request->path(), 'tracereplay') || str_starts_with($request->path(), 'api/tracereplay')) {
+        // Skip trace-replay dashboard routes to avoid recursive tracing
+        if (str_starts_with($request->path(), 'trace-replay') || str_starts_with($request->path(), 'api/trace-replay')) {
             return $next($request);
         }
 
@@ -58,7 +58,7 @@ class TraceMiddleware
 
     public function terminate(Request $request, SymfonyResponse $response): void
     {
-        if (! config('tracereplay.enabled')) {
+        if (! config('trace-replay.enabled')) {
             return;
         }
 

@@ -1,4 +1,4 @@
-@extends('tracereplay::layout')
+@extends('trace-replay::layout')
 @section('title', 'Traces — TraceReplay')
 
 @section('content')
@@ -21,7 +21,7 @@
 
         <div class="flex items-center gap-3 flex-wrap">
             <!-- Search -->
-            <form method="GET" action="{{ route('tracereplay.index') }}" class="flex gap-2">
+            <form method="GET" action="{{ route('trace-replay.index') }}" class="flex gap-2">
                 <input name="search" value="{{ request('search') }}"
                        placeholder="Search name, user, IP…"
                        class="px-3 py-2 text-sm rounded-lg bg-dark-700 border border-gray-700 text-gray-300 placeholder-gray-500 focus:outline-none focus:border-brand-500 w-56">
@@ -39,7 +39,7 @@
                     Filter
                 </button>
                 @if(request()->hasAny(['search','status']))
-                    <a href="{{ route('tracereplay.index') }}" class="px-4 py-2 text-sm rounded-lg bg-dark-700 border border-gray-700 text-gray-400 hover:text-white transition">
+                    <a href="{{ route('trace-replay.index') }}" class="px-4 py-2 text-sm rounded-lg bg-dark-700 border border-gray-700 text-gray-400 hover:text-white transition">
                         ✕ Clear
                     </a>
                 @endif
@@ -57,7 +57,7 @@
 
     <!-- Summary stats bar (live via fetch) -->
     <div id="stats-bar" class="grid grid-cols-2 sm:grid-cols-4 gap-4"
-         x-init="fetch('{{ route('tracereplay.stats') }}').then(r=>r.json()).then(d=>{
+         x-init="fetch('{{ route('trace-replay.stats') }}').then(r=>r.json()).then(d=>{
              document.getElementById('stat-total').textContent  = d.total;
              document.getElementById('stat-failed').textContent = d.failed + ' (' + d.failure_rate + '%)';
              document.getElementById('stat-avg').textContent    = d.avg_duration + ' ms';
@@ -132,11 +132,11 @@
                             @endif
                         </td>
                         <td class="py-3 px-5 text-right flex items-center justify-end gap-2">
-                            <a href="{{ route('tracereplay.show', $trace->id) }}"
+                            <a href="{{ route('trace-replay.show', $trace->id) }}"
                                class="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs bg-dark-700 text-gray-300 hover:text-white hover:bg-dark-600 transition">
                                 View →
                             </a>
-                            <a href="{{ route('tracereplay.export', $trace->id) }}"
+                            <a href="{{ route('trace-replay.export', $trace->id) }}"
                                class="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs bg-dark-700 text-gray-400 hover:text-white transition"
                                title="Export JSON">↓</a>
                         </td>

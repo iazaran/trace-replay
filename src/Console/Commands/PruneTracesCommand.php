@@ -7,7 +7,7 @@ use TraceReplay\Models\Trace;
 
 class PruneTracesCommand extends Command
 {
-    protected $signature = 'tracereplay:prune
+    protected $signature = 'trace-replay:prune
                             {--days= : Override the retention_days config value}
                             {--status= : Only prune traces with this status (success|error|processing)}
                             {--dry-run : Show what would be deleted without deleting}';
@@ -16,7 +16,7 @@ class PruneTracesCommand extends Command
 
     public function handle(): int
     {
-        $days = (int) ($this->option('days') ?? config('tracereplay.retention_days', 30));
+        $days = (int) ($this->option('days') ?? config('trace-replay.retention_days', 30));
         $status = $this->option('status');
         $dryRun = $this->option('dry-run');
 

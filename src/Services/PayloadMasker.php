@@ -11,7 +11,7 @@ class PayloadMasker
     {
         $this->fields = array_map(
             'strtolower',
-            config('tracereplay.mask_fields', [
+            config('trace-replay.mask_fields', [
                 'password', 'password_confirmation', 'token',
                 'api_key', 'authorization', 'secret', 'credit_card',
             ])

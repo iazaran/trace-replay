@@ -2,7 +2,7 @@
 
 > **High-fidelity process tracking, deterministic replay, and AI-powered debugging for Laravel — production & enterprise ready.**
 
-[![Latest Version](https://img.shields.io/packagist/v/iazaran/tracereplay)](https://packagist.org/packages/iazaran/tracereplay)
+[![Latest Version](https://img.shields.io/packagist/v/iazaran/trace-replay)](https://packagist.org/packages/iazaran/trace-replay)
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
 [![Laravel](https://img.shields.io/badge/Laravel-10%20|%2011%20|%2012%20|%2013-red)](https://laravel.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
@@ -10,7 +10,7 @@
 
 TraceReplay is not a standard error logger. It is a full-fledged **execution tracer** that captures every step of your complex workflows, reconstructs them with a waterfall timeline, and offers one-click AI debugging when things go wrong.
 
-![TraceReplay Dashboard](https://raw.githubusercontent.com/iazaran/tracereplay/refs/heads/main/art/preview.png)
+![TraceReplay Dashboard](https://raw.githubusercontent.com/iazaran/trace-replay/refs/heads/main/art/preview.png)
 
 ---
 
@@ -40,14 +40,14 @@ TraceReplay is not a standard error logger. It is a full-fledged **execution tra
 ## 🛠 Installation
 
 ```bash
-composer require iazaran/tracereplay
+composer require iazaran/trace-replay
 ```
 
 Publish the config and migrations:
 
 ```bash
-php artisan vendor:publish --tag=tracereplay-config
-php artisan vendor:publish --tag=tracereplay-migrations
+php artisan vendor:publish --tag=trace-replay-config
+php artisan vendor:publish --tag=trace-replay-migrations
 ```
 
 Run migrations:
@@ -63,79 +63,79 @@ php artisan migrate
 TraceReplay ships with a polished, dark-themed dashboard featuring a waterfall timeline, syntax-highlighted JSON inspector, and live stats — all styled and ready to use out of the box. Publishing the views lets you customise the layout, colours, or add your own branding:
 
 ```bash
-php artisan vendor:publish --tag=tracereplay-views
+php artisan vendor:publish --tag=trace-replay-views
 ```
 
-This copies the Blade templates to `resources/views/vendor/tracereplay/` where you can edit them freely. The package will automatically use your published versions instead of its built-in views.
+This copies the Blade templates to `resources/views/vendor/trace-replay/` where you can edit them freely. The package will automatically use your published versions instead of its built-in views.
 
 ---
 
 ## ⚙️ Configuration
 
-Open `config/tracereplay.php`. Every option is documented inline; the key ones are:
+Open `config/trace-replay.php`. Every option is documented inline; the key ones are:
 
 ```php
 return [
     // Globally enable or disable tracing (useful for CI)
-    'enabled' => env('TRACEREPLAY_ENABLED', true),
+    'enabled' => env('TRACE_REPLAY_ENABLED', true),
 
     // Probabilistic sampling — 1.0 = always trace, 0.1 = trace 10% of requests
-    'sample_rate' => env('TRACEREPLAY_SAMPLE_RATE', 1.0),
+    'sample_rate' => env('TRACE_REPLAY_SAMPLE_RATE', 1.0),
 
     // Multi-tenant project ID (optional)
-    'project_id' => env('TRACEREPLAY_PROJECT_ID', null),
+    'project_id' => env('TRACE_REPLAY_PROJECT_ID', null),
 
     // Automatically mask these keys in request/response payloads
     'mask_fields' => ['password', 'password_confirmation', 'token', 'api_key',
                       'authorization', 'secret', 'credit_card', 'cvv', 'ssn', 'private_key'],
 
     // Track DB queries inside each step
-    'track_db_queries' => env('TRACEREPLAY_TRACK_DB', true),
+    'track_db_queries' => env('TRACE_REPLAY_TRACK_DB', true),
 
     // Dashboard route middleware (add 'auth' or custom gate middleware for production)
     'middleware'     => ['web'],
     'api_middleware' => ['api'],
 
     // IP allowlist for the dashboard (exact match; empty = allow all)
-    'allowed_ips' => array_filter(explode(',', env('TRACEREPLAY_ALLOWED_IPS', ''))),
+    'allowed_ips' => array_filter(explode(',', env('TRACE_REPLAY_ALLOWED_IPS', ''))),
 
     // Async step persistence via a queue
     'queue' => [
-        'enabled'    => env('TRACEREPLAY_QUEUE_ENABLED', false),
-        'connection' => env('TRACEREPLAY_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
-        'queue'      => env('TRACEREPLAY_QUEUE_NAME', 'default'),
+        'enabled'    => env('TRACE_REPLAY_QUEUE_ENABLED', false),
+        'connection' => env('TRACE_REPLAY_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
+        'queue'      => env('TRACE_REPLAY_QUEUE_NAME', 'default'),
     ],
 
     // Replay engine
     'replay' => [
-        'default_base_url' => env('TRACEREPLAY_REPLAY_URL', env('APP_URL', 'http://localhost')),
-        'timeout'          => env('TRACEREPLAY_REPLAY_TIMEOUT', 30),
+        'default_base_url' => env('TRACE_REPLAY_REPLAY_URL', env('APP_URL', 'http://localhost')),
+        'timeout'          => env('TRACE_REPLAY_REPLAY_TIMEOUT', 30),
     ],
 
     // Auto-pruning retention period (days)
-    'retention_days' => env('TRACEREPLAY_RETENTION_DAYS', 30),
+    'retention_days' => env('TRACE_REPLAY_RETENTION_DAYS', 30),
 
     // Failure notifications (email / Slack webhook)
     'notifications' => [
-        'on_failure' => env('TRACEREPLAY_NOTIFY_ON_FAILURE', false),
+        'on_failure' => env('TRACE_REPLAY_NOTIFY_ON_FAILURE', false),
         'channels'   => ['mail'],
-        'mail'       => ['to' => env('TRACEREPLAY_NOTIFY_EMAIL')],
-        'slack'      => ['webhook_url' => env('TRACEREPLAY_SLACK_WEBHOOK')],
+        'mail'       => ['to' => env('TRACE_REPLAY_NOTIFY_EMAIL')],
+        'slack'      => ['webhook_url' => env('TRACE_REPLAY_SLACK_WEBHOOK')],
     ],
 
     // OpenAI integration for in-dashboard AI responses
     'ai' => [
-        'openai_api_key' => env('TRACEREPLAY_OPENAI_KEY'),
-        'model'          => env('TRACEREPLAY_OPENAI_MODEL', 'gpt-4o'),
+        'openai_api_key' => env('TRACE_REPLAY_OPENAI_KEY'),
+        'model'          => env('TRACE_REPLAY_OPENAI_MODEL', 'gpt-4o'),
     ],
 
     // Auto-tracing for jobs and artisan commands (registered automatically)
     'auto_trace' => [
-        'jobs'     => env('TRACEREPLAY_AUTO_TRACE_JOBS', true),
-        'commands' => env('TRACEREPLAY_AUTO_TRACE_COMMANDS', false),
+        'jobs'     => env('TRACE_REPLAY_AUTO_TRACE_JOBS', true),
+        'commands' => env('TRACE_REPLAY_AUTO_TRACE_COMMANDS', false),
         'exclude_commands' => [
             'queue:work', 'queue:listen', 'horizon', 'schedule:run',
-            'schedule:work', 'tracereplay:prune', 'tracereplay:export',
+            'schedule:work', 'trace-replay:prune', 'trace-replay:export',
         ],
     ],
 ];
@@ -222,7 +222,7 @@ For Laravel 11+ (using `bootstrap/app.php`):
 
 Queue jobs are automatically traced when `auto_trace.jobs` is enabled (default: `true`). No manual listener registration is needed — the service provider wires everything up.
 
-To disable, set `TRACEREPLAY_AUTO_TRACE_JOBS=false` in your `.env`.
+To disable, set `TRACE_REPLAY_AUTO_TRACE_JOBS=false` in your `.env`.
 
 ---
 
@@ -231,21 +231,21 @@ To disable, set `TRACEREPLAY_AUTO_TRACE_JOBS=false` in your `.env`.
 Artisan commands can be auto-traced by enabling `auto_trace.commands`:
 
 ```env
-TRACEREPLAY_AUTO_TRACE_COMMANDS=true
+TRACE_REPLAY_AUTO_TRACE_COMMANDS=true
 ```
 
-Internal commands like `queue:work`, `horizon`, and `tracereplay:prune` are excluded by default (see `auto_trace.exclude_commands` in the config).
+Internal commands like `queue:work`, `horizon`, and `trace-replay:prune` are excluded by default (see `auto_trace.exclude_commands` in the config).
 
 ---
 
 ### Debug Bar Component
 
-Drop the `<x-tracereplay-trace-bar />` Blade component into your layout for instant in-page trace inspection:
+Drop the `<x-trace-replay-trace-bar />` Blade component into your layout for instant in-page trace inspection:
 
 ```blade
 {{-- resources/views/layouts/app.blade.php --}}
 @if(config('app.debug'))
-    <x-tracereplay-trace-bar />
+    <x-trace-replay-trace-bar />
 @endif
 ```
 
@@ -253,7 +253,7 @@ Drop the `<x-tracereplay-trace-bar />` Blade component into your layout for inst
 
 ## 🎨 The Dashboard
 
-Access the built-in dashboard at `https://your-app.com/tracereplay`.
+Access the built-in dashboard at `https://your-app.com/trace-replay`.
 
 **Features:**
 - **Waterfall timeline** — visual bars show each step's exact duration relative to the total trace
@@ -265,25 +265,25 @@ Access the built-in dashboard at `https://your-app.com/tracereplay`.
 
 ### Securing the Dashboard
 
-Add authentication or authorization middleware in `config/tracereplay.php`:
+Add authentication or authorization middleware in `config/trace-replay.php`:
 
 ```php
-'middleware' => ['web', 'auth', 'can:view-tracereplay'],
+'middleware' => ['web', 'auth', 'can:view-trace-replay'],
 ```
 
 Then define the gate:
 
 ```php
 // app/Providers/AuthServiceProvider.php
-Gate::define('view-tracereplay', function ($user) {
-    return in_array($user->email, config('tracereplay.admin_emails', []));
+Gate::define('view-trace-replay', function ($user) {
+    return in_array($user->email, config('trace-replay.admin_emails', []));
 });
 ```
 
 Or use IP allowlisting (exact match, comma-separated via env):
 
 ```env
-TRACEREPLAY_ALLOWED_IPS=203.0.113.5,10.0.0.1
+TRACE_REPLAY_ALLOWED_IPS=203.0.113.5,10.0.0.1
 ```
 
 ---
@@ -303,7 +303,7 @@ Paste this into any LLM. Optionally configure your OpenAI key and click **"Ask A
 
 ## 🤖 MCP / AI-Agent JSON-RPC API
 
-TraceReplay exposes a JSON-RPC 2.0 endpoint at `POST /api/tracereplay/mcp` for autonomous AI agents.
+TraceReplay exposes a JSON-RPC 2.0 endpoint at `POST /api/trace-replay/mcp` for autonomous AI agents.
 
 **Available methods:**
 
@@ -333,15 +333,15 @@ Automatically prune old traces with the built-in Artisan command. Add to your sc
 
 ```php
 // app/Console/Kernel.php
-$schedule->command('tracereplay:prune --days=30')->daily();
+$schedule->command('trace-replay:prune --days=30')->daily();
 ```
 
 Options:
 
 ```bash
-php artisan tracereplay:prune --days=30                # Delete traces older than 30 days
-php artisan tracereplay:prune --days=30 --dry-run      # Preview what would be deleted
-php artisan tracereplay:prune --days=7 --status=error  # Only prune error traces
+php artisan trace-replay:prune --days=30                # Delete traces older than 30 days
+php artisan trace-replay:prune --days=30 --dry-run      # Preview what would be deleted
+php artisan trace-replay:prune --days=7 --status=error  # Only prune error traces
 ```
 
 ---
@@ -351,10 +351,10 @@ php artisan tracereplay:prune --days=7 --status=error  # Only prune error traces
 Export a trace to JSON or CSV for archiving or external analysis:
 
 ```bash
-php artisan tracereplay:export {id} --format=json
-php artisan tracereplay:export {id} --format=csv
-php artisan tracereplay:export {id} --format=json --output=/tmp/trace.json
-php artisan tracereplay:export --status=error --format=json  # Export all error traces
+php artisan trace-replay:export {id} --format=json
+php artisan trace-replay:export {id} --format=csv
+php artisan trace-replay:export {id} --format=json --output=/tmp/trace.json
+php artisan trace-replay:export --status=error --format=json  # Export all error traces
 ```
 
 ---
@@ -378,8 +378,8 @@ composer install
 - Dashboard — index, filters, search, show, stats, export, replay, AI prompt
 - MCP API — REST endpoints and JSON-RPC (all methods + error handling)
 - Middleware — TraceMiddleware (route skipping, disabled config), AuthMiddleware (IP allow/block)
-- Artisan `tracereplay:prune` (delete, dry-run, status filter, validation)
-- Artisan `tracereplay:export` (JSON, CSV, file output, status filter, validation)
+- Artisan `trace-replay:prune` (delete, dry-run, status filter, validation)
+- Artisan `trace-replay:export` (JSON, CSV, file output, status filter, validation)
 - Blade components — TraceBar rendering with enabled/disabled states
 
 ---

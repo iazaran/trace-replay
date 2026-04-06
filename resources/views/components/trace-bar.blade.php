@@ -1,5 +1,5 @@
-@if(config('tracereplay.enabled') && $trace)
-<div id="tracereplay-bar"
+@if(config('trace-replay.enabled') && $trace)
+<div id="trace-replay-bar"
      style="position:fixed;bottom:0;left:0;right:0;z-index:9999;font-family:monospace;font-size:12px;background:#0f1117;color:#c9d1d9;border-top:1px solid #21262d;display:flex;align-items:center;gap:16px;padding:6px 16px;">
     
     <!-- Icon + Brand -->
@@ -28,13 +28,13 @@
     <span style="color:#4b5563;">{{ substr($trace->id, 0, 8) }}</span>
 
     <!-- Dashboard link -->
-    <a href="{{ route('tracereplay.show', $trace->id) }}"
+    <a href="{{ route('trace-replay.show', $trace->id) }}"
        style="margin-left:auto;color:#3b82f6;text-decoration:none;" target="_blank">
         View in Dashboard →
     </a>
 
     <!-- Close button -->
-    <button onclick="document.getElementById('tracereplay-bar').remove()"
+    <button onclick="document.getElementById('trace-replay-bar').remove()"
             style="background:none;border:none;color:#6b7280;cursor:pointer;font-size:16px;line-height:1;">×</button>
 </div>
 @endif

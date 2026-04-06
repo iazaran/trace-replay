@@ -4,12 +4,12 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Enable / Disable TraceReplay
+    | Enable / Disable Trace-Replay
     |--------------------------------------------------------------------------
-    | Set TRACEREPLAY_ENABLED=false in production .env to completely disable
+    | Set TRACE_REPLAY_ENABLED=false in production .env to completely disable
     | all tracing with zero overhead.
     */
-    'enabled' => env('TRACEREPLAY_ENABLED', true),
+    'enabled' => env('TRACE_REPLAY_ENABLED', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -17,9 +17,9 @@ return [
     |--------------------------------------------------------------------------
     | A float between 0.0 and 1.0 controlling what fraction of HTTP requests
     | are traced. 1.0 = trace every request, 0.1 = trace 10% at random.
-    | Manual TraceReplay::start() calls are never sampled.
+    | Manual Trace-Replay::start() calls are never sampled.
     */
-    'sample_rate' => env('TRACEREPLAY_SAMPLE_RATE', 1.0),
+    'sample_rate' => env('TRACE_REPLAY_SAMPLE_RATE', 1.0),
 
     /*
     |--------------------------------------------------------------------------
@@ -28,7 +28,7 @@ return [
     | Optionally set a static project UUID, or override determineProjectId()
     | in a custom TraceReplayManager binding for dynamic multi-tenancy.
     */
-    'project_id' => env('TRACEREPLAY_PROJECT_ID', null),
+    'project_id' => env('TRACE_REPLAY_PROJECT_ID', null),
 
     /*
     |--------------------------------------------------------------------------
@@ -38,9 +38,9 @@ return [
     | worker to avoid adding latency to the request lifecycle.
     */
     'queue' => [
-        'enabled' => env('TRACEREPLAY_QUEUE_ENABLED', false),
-        'connection' => env('TRACEREPLAY_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
-        'queue' => env('TRACEREPLAY_QUEUE_NAME', 'default'),
+        'enabled' => env('TRACE_REPLAY_QUEUE_ENABLED', false),
+        'connection' => env('TRACE_REPLAY_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
+        'queue' => env('TRACE_REPLAY_QUEUE_NAME', 'default'),
     ],
 
     /*
@@ -50,7 +50,7 @@ return [
     | When enabled, each step records the number and total time of DB queries
     | executed within the step closure.
     */
-    'track_db_queries' => env('TRACEREPLAY_TRACK_DB', true),
+    'track_db_queries' => env('TRACE_REPLAY_TRACK_DB', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -78,8 +78,8 @@ return [
     |--------------------------------------------------------------------------
     */
     'replay' => [
-        'default_base_url' => env('TRACEREPLAY_REPLAY_URL', env('APP_URL', 'http://localhost')),
-        'timeout' => env('TRACEREPLAY_REPLAY_TIMEOUT', 30),
+        'default_base_url' => env('TRACE_REPLAY_REPLAY_URL', env('APP_URL', 'http://localhost')),
+        'timeout' => env('TRACE_REPLAY_REPLAY_TIMEOUT', 30),
     ],
 
     /*
@@ -87,17 +87,17 @@ return [
     | Retention / Auto-Pruning
     |--------------------------------------------------------------------------
     | Traces older than `retention_days` will be deleted by the artisan command:
-    |   php artisan tracereplay:prune
+    |   php artisan trace-replay:prune
     | Set to null to disable pruning.
     */
-    'retention_days' => env('TRACEREPLAY_RETENTION_DAYS', 30),
+    'retention_days' => env('TRACE_REPLAY_RETENTION_DAYS', 30),
 
     /*
     |--------------------------------------------------------------------------
     | Dashboard Route Middleware
     |--------------------------------------------------------------------------
-    | Protect the TraceReplay dashboard. For production use, add 'auth' or a
-    | custom gate middleware, e.g. ['web', 'auth', 'can:view-tracereplay'].
+    | Protect the Trace-Replay dashboard. For production use, add 'auth' or a
+    | custom gate middleware, e.g. ['web', 'auth', 'can:view-trace-replay'].
     */
     'middleware' => ['web'],
     'api_middleware' => ['api'],
@@ -110,7 +110,7 @@ return [
     | dashboard. CIDR notation is not evaluated — exact match only.
     | Leave empty to allow all IPs (rely on middleware for auth instead).
     */
-    'allowed_ips' => array_filter(explode(',', env('TRACEREPLAY_ALLOWED_IPS', ''))),
+    'allowed_ips' => array_filter(explode(',', env('TRACE_REPLAY_ALLOWED_IPS', ''))),
 
     /*
     |--------------------------------------------------------------------------
@@ -120,13 +120,13 @@ return [
     | notification is dispatched via the configured channels.
     */
     'notifications' => [
-        'on_failure' => env('TRACEREPLAY_NOTIFY_ON_FAILURE', false),
+        'on_failure' => env('TRACE_REPLAY_NOTIFY_ON_FAILURE', false),
         'channels' => ['mail'],           // 'mail', 'slack'
         'mail' => [
-            'to' => env('TRACEREPLAY_NOTIFY_EMAIL', null),
+            'to' => env('TRACE_REPLAY_NOTIFY_EMAIL', null),
         ],
         'slack' => [
-            'webhook_url' => env('TRACEREPLAY_SLACK_WEBHOOK', null),
+            'webhook_url' => env('TRACE_REPLAY_SLACK_WEBHOOK', null),
         ],
     ],
 
@@ -139,8 +139,8 @@ return [
     | receive a copyable prompt instead (no external call is made).
     */
     'ai' => [
-        'openai_api_key' => env('TRACEREPLAY_OPENAI_KEY', null),
-        'model' => env('TRACEREPLAY_OPENAI_MODEL', 'gpt-4o'),
+        'openai_api_key' => env('TRACE_REPLAY_OPENAI_KEY', null),
+        'model' => env('TRACE_REPLAY_OPENAI_MODEL', 'gpt-4o'),
     ],
 
     /*
@@ -151,12 +151,12 @@ return [
     | in traces without any manual instrumentation.
     */
     'auto_trace' => [
-        'jobs' => env('TRACEREPLAY_AUTO_TRACE_JOBS', true),
-        'commands' => env('TRACEREPLAY_AUTO_TRACE_COMMANDS', false),
+        'jobs' => env('TRACE_REPLAY_AUTO_TRACE_JOBS', true),
+        'commands' => env('TRACE_REPLAY_AUTO_TRACE_COMMANDS', false),
         // Artisan commands to exclude from auto-tracing (exact names)
         'exclude_commands' => [
             'queue:work', 'queue:listen', 'horizon', 'schedule:run',
-            'schedule:work', 'tracereplay:prune', 'tracereplay:export',
+            'schedule:work', 'trace-replay:prune', 'trace-replay:export',
         ],
     ],
 ];

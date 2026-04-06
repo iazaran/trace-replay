@@ -75,10 +75,10 @@
             </div>
         </div>
         <nav class="flex gap-4 items-center">
-            <a href="{{ route('tracereplay.index') }}" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">Traces</a>
-            <a href="{{ route('tracereplay.index') }}?status=error" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">Errors</a>
-            <a href="{{ route('tracereplay.index') }}?status=processing" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">In&nbsp;Progress</a>
-            <a href="https://github.com/iazaran/tracereplay" target="_blank" class="text-sm font-medium text-gray-500 hover:text-gray-300 transition-colors">GitHub ↗</a>
+            <a href="{{ route('trace-replay.index') }}" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">Traces</a>
+            <a href="{{ route('trace-replay.index') }}?status=error" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">Errors</a>
+            <a href="{{ route('trace-replay.index') }}?status=processing" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">In&nbsp;Progress</a>
+            <a href="https://github.com/iazaran/trace-replay" target="_blank" class="text-sm font-medium text-gray-500 hover:text-gray-300 transition-colors">GitHub ↗</a>
         </nav>
     </header>
 

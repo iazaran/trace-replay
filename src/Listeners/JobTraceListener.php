@@ -11,7 +11,7 @@ class JobTraceListener
 {
     public function onJobProcessing(JobProcessing $event): void
     {
-        if (! config('tracereplay.auto_trace.jobs', true)) {
+        if (! config('trace-replay.auto_trace.jobs', true)) {
             return;
         }
 
@@ -30,7 +30,7 @@ class JobTraceListener
 
     public function onJobProcessed(JobProcessed $_event): void
     {
-        if (! config('tracereplay.auto_trace.jobs', true)) {
+        if (! config('trace-replay.auto_trace.jobs', true)) {
             return;
         }
 
@@ -40,7 +40,7 @@ class JobTraceListener
 
     public function onJobFailed(JobFailed $event): void
     {
-        if (! config('tracereplay.auto_trace.jobs', true)) {
+        if (! config('trace-replay.auto_trace.jobs', true)) {
             return;
         }
 

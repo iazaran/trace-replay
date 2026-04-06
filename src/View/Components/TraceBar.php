@@ -13,13 +13,13 @@ class TraceBar extends Component
 
     public function render()
     {
-        if (! $this->show || ! config('tracereplay.enabled', true)) {
+        if (! $this->show || ! config('trace-replay.enabled', true)) {
             return '';
         }
 
         $trace = TraceReplay::getCurrentTrace();
 
-        return view('tracereplay::components.trace-bar', [
+        return view('trace-replay::components.trace-bar', [
             'trace' => $trace,
         ]);
     }

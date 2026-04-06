@@ -10,7 +10,7 @@ class CommandTraceListener
 {
     public function onCommandStarting(CommandStarting $event): void
     {
-        if (! config('tracereplay.auto_trace.commands', false)) {
+        if (! config('trace-replay.auto_trace.commands', false)) {
             return;
         }
 
@@ -19,7 +19,7 @@ class CommandTraceListener
             return;
         }
 
-        $excluded = config('tracereplay.auto_trace.exclude_commands', []);
+        $excluded = config('trace-replay.auto_trace.exclude_commands', []);
         if (\in_array($event->command, $excluded, true)) {
             return;
         }
@@ -34,7 +34,7 @@ class CommandTraceListener
 
     public function onCommandFinished(CommandFinished $event): void
     {
-        if (! config('tracereplay.auto_trace.commands', false)) {
+        if (! config('trace-replay.auto_trace.commands', false)) {
             return;
         }
 
@@ -42,7 +42,7 @@ class CommandTraceListener
             return;
         }
 
-        $excluded = config('tracereplay.auto_trace.exclude_commands', []);
+        $excluded = config('trace-replay.auto_trace.exclude_commands', []);
         if (\in_array($event->command, $excluded, true)) {
             return;
         }

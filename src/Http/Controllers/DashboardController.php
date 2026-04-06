@@ -26,14 +26,14 @@ class DashboardController extends Controller
 
         $traces = $query->paginate(25)->withQueryString();
 
-        return view('tracereplay::index', compact('traces'));
+        return view('trace-replay::index', compact('traces'));
     }
 
     public function show(string $id)
     {
         $trace = Trace::with('steps')->findOrFail($id);
 
-        return view('tracereplay::show', compact('trace'));
+        return view('trace-replay::show', compact('trace'));
     }
 
     public function replay(Request $request, string $id, ReplayService $replayService): JsonResponse

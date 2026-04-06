@@ -5,13 +5,13 @@ use TraceReplay\Http\Controllers\DashboardController;
 use TraceReplay\Http\Middleware\TraceReplayAuthMiddleware;
 
 $middleware = array_merge(
-    config('tracereplay.middleware', ['web']),
+    config('trace-replay.middleware', ['web']),
     [TraceReplayAuthMiddleware::class]
 );
 
 Route::group([
-    'prefix' => 'tracereplay',
-    'as' => 'tracereplay.',
+    'prefix' => 'trace-replay',
+    'as' => 'trace-replay.',
     'middleware' => $middleware,
 ], function () {
     Route::get('/', [DashboardController::class, 'index'])->name('index');
