@@ -1,4 +1,4 @@
-@extends('tracereplay::layout')
+@extends('trace-replay::layout')
 @section('title', ($trace->name ?? 'Trace') . ' — TraceReplay')
 
 @section('content')
@@ -277,7 +277,7 @@
                 this.aiPromptContent = 'Generating expert debugging prompt…';
 
                 try {
-                    const response = await fetch(`{{ route('tracereplay.ai.prompt', $trace->id) }}`, {
+                    const response = await fetch(`{{ route('trace-replay.ai.prompt', $trace->id) }}`, {
                         method: 'POST',
                         headers: {
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
@@ -297,7 +297,7 @@
                 this.replayData = { original: 'Running replay...', replay: 'Waiting...' };
                 
                 try {
-                    const response = await fetch(`{{ route('tracereplay.replay', $trace->id) }}`, {
+                    const response = await fetch(`{{ route('trace-replay.replay', $trace->id) }}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',

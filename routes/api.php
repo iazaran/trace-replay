@@ -4,9 +4,9 @@ use Illuminate\Support\Facades\Route;
 use TraceReplay\Http\Controllers\Api\McpController;
 
 Route::group([
-    'prefix' => 'api/tracereplay/mcp',
-    'as' => 'tracereplay.api.mcp.',
-    'middleware' => config('tracereplay.api_middleware', ['api']),
+    'prefix' => 'api/trace-replay/mcp',
+    'as' => 'trace-replay.api.mcp.',
+    'middleware' => config('trace-replay.api_middleware', ['api']),
 ], function () {
     Route::post('/', [McpController::class, 'handleRpc'])->name('rpc');
 

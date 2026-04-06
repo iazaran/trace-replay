@@ -10,7 +10,7 @@ class NotificationService
 {
     public function notifyFailure(Trace $trace): void
     {
-        $channels = config('tracereplay.notifications.channels', []);
+        $channels = config('trace-replay.notifications.channels', []);
 
         foreach ($channels as $channel) {
             match ($channel) {
@@ -23,13 +23,13 @@ class NotificationService
 
     protected function sendMail(Trace $trace): void
     {
-        $to = config('tracereplay.notifications.mail.to');
+        $to = config('trace-replay.notifications.mail.to');
         if (! $to) {
             return;
         }
 
         $errorStep = $trace->error_step;
-        $dashboardUrl = rtrim(config('app.url', ''), '/').'/tracereplay/traces/'.$trace->id;
+        $dashboardUrl = rtrim(config('app.url', ''), '/').'/trace-replay/traces/'.$trace->id;
 
         $subject = "[TraceReplay] Trace Failed: {$trace->name}";
         $body = $this->buildEmailBody($trace, $errorStep, $dashboardUrl);
@@ -41,13 +41,13 @@ class NotificationService
 
     protected function sendSlack(Trace $trace): void
     {
-        $webhookUrl = config('tracereplay.notifications.slack.webhook_url');
+        $webhookUrl = config('trace-replay.notifications.slack.webhook_url');
         if (! $webhookUrl) {
             return;
         }
 
         $errorStep = $trace->error_step;
-        $dashboardUrl = rtrim(config('app.url', ''), '/').'/tracereplay/traces/'.$trace->id;
+        $dashboardUrl = rtrim(config('app.url', ''), '/').'/trace-replay/traces/'.$trace->id;
 
         $payload = [
             'text' => ':red_circle: *TraceReplay — Trace Failed*',

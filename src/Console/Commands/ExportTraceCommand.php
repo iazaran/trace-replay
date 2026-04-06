@@ -7,7 +7,7 @@ use TraceReplay\Models\Trace;
 
 class ExportTraceCommand extends Command
 {
-    protected $signature = 'tracereplay:export
+    protected $signature = 'trace-replay:export
                             {id? : UUID of the trace to export (omit to export all)}
                             {--format=json : Export format: json or csv}
                             {--output= : File path to write the output (defaults to stdout)}

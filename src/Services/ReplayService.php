@@ -32,7 +32,7 @@ class ReplayService
         // Remove host headers so they don't interfere with the target
         unset($headers['host'], $headers['Host']);
 
-        $baseUrl = $overrideUrl ?? config('tracereplay.replay.default_base_url');
+        $baseUrl = $overrideUrl ?? config('trace-replay.replay.default_base_url');
         $targetUrl = rtrim($baseUrl, '/').'/'.ltrim($uri, '/');
 
         // Symfony normalises all header names to lowercase, so 'Content-Type' never exists
@@ -40,7 +40,7 @@ class ReplayService
         $isJson = str_contains($headers['content-type'][0] ?? '', 'json');
 
         $response = Http::withHeaders($headers)
-            ->timeout((int) config('tracereplay.replay.timeout', 30))
+            ->timeout((int) config('trace-replay.replay.timeout', 30))
             ->withQueryParameters($query)
             ->send($method, $targetUrl, $isJson ? ['json' => $body] : ['form_params' => $body]);
 

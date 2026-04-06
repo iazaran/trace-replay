@@ -31,7 +31,7 @@ class TestCase extends Orchestra
             'prefix' => '',
         ]);
 
-        $app['config']->set('tracereplay.enabled', true);
+        $app['config']->set('trace-replay.enabled', true);
         $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
     }
 }

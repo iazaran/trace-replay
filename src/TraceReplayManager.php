@@ -36,7 +36,7 @@ class TraceReplayManager
 
     public function start(string $name, array $tags = []): ?Trace
     {
-        if (! config('tracereplay.enabled', true)) {
+        if (! config('trace-replay.enabled', true)) {
             return null;
         }
 
@@ -81,7 +81,7 @@ class TraceReplayManager
         $start = microtime(true);
         $status = 'success';
         $errorReason = null;
-        $trackDb = config('tracereplay.track_db_queries', true);
+        $trackDb = config('trace-replay.track_db_queries', true);
 
         // Use Laravel's built-in query log rather than DB::listen() to avoid
         // listener accumulation: each additional step() call would register
@@ -232,7 +232,7 @@ class TraceReplayManager
             ]);
 
             // Fire notification if configured and trace failed
-            if ($status === 'error' && config('tracereplay.notifications.on_failure', false)) {
+            if ($status === 'error' && config('trace-replay.notifications.on_failure', false)) {
                 try {
                     app(NotificationService::class)->notifyFailure($this->currentTrace->fresh(['steps']));
                 } catch (Throwable) {
@@ -259,10 +259,10 @@ class TraceReplayManager
     protected function persistStep(TraceStep $step): void
     {
         try {
-            if (config('tracereplay.queue.enabled') && class_exists(PersistTraceStepJob::class)) {
+            if (config('trace-replay.queue.enabled') && class_exists(PersistTraceStepJob::class)) {
                 dispatch(new PersistTraceStepJob($step->toArray()))
-                    ->onConnection(config('tracereplay.queue.connection'))
-                    ->onQueue(config('tracereplay.queue.queue'));
+                    ->onConnection(config('trace-replay.queue.connection'))
+                    ->onQueue(config('trace-replay.queue.queue'));
             } else {
                 $step->save();
             }
@@ -273,7 +273,7 @@ class TraceReplayManager
 
     protected function determineProjectId(): ?string
     {
-        return config('tracereplay.project_id');
+        return config('trace-replay.project_id');
     }
 
     /**

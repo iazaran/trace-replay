@@ -1,5 +1,5 @@
 {
-    "name": "iazaran/tracereplay",
+    "name": "iazaran/trace-replay",
     "description": "A high-fidelity process tracking, replay, and AI debugging package for Laravel.",
     "type": "library",
     "license": "MIT",
@@ -18,7 +18,7 @@
         "monitoring",
         "observability"
     ],
-    "homepage": "https://iazaran.github.io/tracereplay/",
+    "homepage": "https://iazaran.github.io/trace-replay/",
     "require": {
         "php": "^8.2",
         "illuminate/support": "^10.0|^11.0|^12.0|^13.0",

@@ -113,7 +113,7 @@
                 <a href="#introduction" class="text-zinc-400 hover:text-white transition">Docs</a>
                 <a href="#installation" class="text-zinc-400 hover:text-white transition">Install</a>
                 <a href="#api-reference" class="text-zinc-400 hover:text-white transition">API</a>
-                <a href="https://github.com/iazaran/tracereplay" target="_blank" class="text-zinc-400 hover:text-white transition">GitHub</a>
+                <a href="https://github.com/iazaran/trace-replay" target="_blank" class="text-zinc-400 hover:text-white transition">GitHub</a>
             </nav>
         </div>
     </header>
@@ -157,55 +157,55 @@
             <p>TraceReplay is not a standard error logger. It is a full-fledged <strong>execution tracer</strong> that captures every step of your complex workflows, reconstructs them with a waterfall timeline, and offers one-click AI debugging when things go wrong. It supports Laravel 10, 11, 12, and 13.</p>
 
             <h2 id="installation">Installation</h2>
-            <pre><code class="language-bash">composer require iazaran/tracereplay</code></pre>
+            <pre><code class="language-bash">composer require iazaran/trace-replay</code></pre>
             <p>Publish config and migrations:</p>
-            <pre><code class="language-bash">php artisan vendor:publish --tag=tracereplay-config
-php artisan vendor:publish --tag=tracereplay-migrations</code></pre>
+            <pre><code class="language-bash">php artisan vendor:publish --tag=trace-replay-config
+php artisan vendor:publish --tag=trace-replay-migrations</code></pre>
             <pre><code class="language-bash">php artisan migrate</code></pre>
             <p>Migrations use <code>json</code> columns for full MySQL, MariaDB, PostgreSQL, and SQLite compatibility.</p>
 
             <h3>Publishing Views (Recommended)</h3>
             <p>TraceReplay ships with a polished, dark-themed dashboard featuring a waterfall timeline, syntax-highlighted JSON inspector, and live stats — all styled and ready to use out of the box. Publishing the views lets you customise the layout, colours, or add your own branding:</p>
-            <pre><code class="language-bash">php artisan vendor:publish --tag=tracereplay-views</code></pre>
-            <p>This copies the Blade templates to <code>resources/views/vendor/tracereplay/</code> where you can edit them freely. The package will automatically use your published versions instead of its built-in views.</p>
+            <pre><code class="language-bash">php artisan vendor:publish --tag=trace-replay-views</code></pre>
+            <p>This copies the Blade templates to <code>resources/views/vendor/trace-replay/</code> where you can edit them freely. The package will automatically use your published versions instead of its built-in views.</p>
 
             <h2 id="configuration">Configuration</h2>
-            <p>Key options in <code>config/tracereplay.php</code>:</p>
+            <p>Key options in <code>config/trace-replay.php</code>:</p>
             <pre><code class="language-php">return [
-    'enabled'          => env('TRACEREPLAY_ENABLED', true),
-    'sample_rate'      => env('TRACEREPLAY_SAMPLE_RATE', 1.0), // 0.1 = 10% of requests
-    'project_id'       => env('TRACEREPLAY_PROJECT_ID', null),
+    'enabled'          => env('TRACE_REPLAY_ENABLED', true),
+    'sample_rate'      => env('TRACE_REPLAY_SAMPLE_RATE', 1.0), // 0.1 = 10% of requests
+    'project_id'       => env('TRACE_REPLAY_PROJECT_ID', null),
     'mask_fields'      => ['password', 'password_confirmation', 'token', 'api_key',
                            'authorization', 'secret', 'credit_card', 'cvv', 'ssn', 'private_key'],
-    'track_db_queries' => env('TRACEREPLAY_TRACK_DB', true),
+    'track_db_queries' => env('TRACE_REPLAY_TRACK_DB', true),
     'middleware'        => ['web'],           // add 'auth', 'can:...' for production
     'api_middleware'    => ['api'],
-    'allowed_ips'      => array_filter(explode(',', env('TRACEREPLAY_ALLOWED_IPS', ''))),
+    'allowed_ips'      => array_filter(explode(',', env('TRACE_REPLAY_ALLOWED_IPS', ''))),
     'queue' => [
-        'enabled'    => env('TRACEREPLAY_QUEUE_ENABLED', false),
-        'connection' => env('TRACEREPLAY_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
-        'queue'      => env('TRACEREPLAY_QUEUE_NAME', 'default'),
+        'enabled'    => env('TRACE_REPLAY_QUEUE_ENABLED', false),
+        'connection' => env('TRACE_REPLAY_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
+        'queue'      => env('TRACE_REPLAY_QUEUE_NAME', 'default'),
     ],
     'replay' => [
-        'default_base_url' => env('TRACEREPLAY_REPLAY_URL', env('APP_URL')),
-        'timeout'          => env('TRACEREPLAY_REPLAY_TIMEOUT', 30),
+        'default_base_url' => env('TRACE_REPLAY_REPLAY_URL', env('APP_URL')),
+        'timeout'          => env('TRACE_REPLAY_REPLAY_TIMEOUT', 30),
     ],
-    'retention_days' => env('TRACEREPLAY_RETENTION_DAYS', 30),
+    'retention_days' => env('TRACE_REPLAY_RETENTION_DAYS', 30),
     'notifications' => [
-        'on_failure'  => env('TRACEREPLAY_NOTIFY_ON_FAILURE', false),
+        'on_failure'  => env('TRACE_REPLAY_NOTIFY_ON_FAILURE', false),
         'channels'    => ['mail'],
-        'mail'        => ['to' => env('TRACEREPLAY_NOTIFY_EMAIL')],
-        'slack'       => ['webhook_url' => env('TRACEREPLAY_SLACK_WEBHOOK')],
+        'mail'        => ['to' => env('TRACE_REPLAY_NOTIFY_EMAIL')],
+        'slack'       => ['webhook_url' => env('TRACE_REPLAY_SLACK_WEBHOOK')],
     ],
     'ai' => [
-        'openai_api_key' => env('TRACEREPLAY_OPENAI_KEY'),
-        'model'          => env('TRACEREPLAY_OPENAI_MODEL', 'gpt-4o'),
+        'openai_api_key' => env('TRACE_REPLAY_OPENAI_KEY'),
+        'model'          => env('TRACE_REPLAY_OPENAI_MODEL', 'gpt-4o'),
     ],
     'auto_trace' => [
-        'jobs'     => env('TRACEREPLAY_AUTO_TRACE_JOBS', true),
-        'commands' => env('TRACEREPLAY_AUTO_TRACE_COMMANDS', false),
+        'jobs'     => env('TRACE_REPLAY_AUTO_TRACE_JOBS', true),
+        'commands' => env('TRACE_REPLAY_AUTO_TRACE_COMMANDS', false),
         'exclude_commands' => ['queue:work', 'queue:listen', 'horizon', 'schedule:run',
-                               'schedule:work', 'tracereplay:prune', 'tracereplay:export'],
+                               'schedule:work', 'trace-replay:prune', 'trace-replay:export'],
     ],
 ];</code></pre>
 
@@ -270,11 +270,11 @@ class BookingService
             <h2 id="auto-tracing">Auto Tracing — Jobs &amp; Commands</h2>
             <p>Queue jobs are automatically traced when <code>auto_trace.jobs</code> is enabled (default: <code>true</code>). No manual listener registration needed — the service provider wires everything up.</p>
             <p>Artisan commands can be auto-traced by enabling <code>auto_trace.commands</code>:</p>
-            <pre><code class="language-bash">TRACEREPLAY_AUTO_TRACE_COMMANDS=true</code></pre>
-            <p>Internal commands like <code>queue:work</code>, <code>horizon</code>, and <code>tracereplay:prune</code> are excluded by default (see <code>auto_trace.exclude_commands</code>).</p>
+            <pre><code class="language-bash">TRACE_REPLAY_AUTO_TRACE_COMMANDS=true</code></pre>
+            <p>Internal commands like <code>queue:work</code>, <code>horizon</code>, and <code>trace-replay:prune</code> are excluded by default (see <code>auto_trace.exclude_commands</code>).</p>
 
             <h2 id="dashboard">The Dashboard</h2>
-            <p>Navigate to <code>https://your-app.com/tracereplay</code>.</p>
+            <p>Navigate to <code>https://your-app.com/trace-replay</code>.</p>
             <ul>
                 <li><strong>Waterfall timeline</strong> — visual duration bars relative to total trace time</li>
                 <li><strong>Live stats</strong> — auto-refreshing counters (total, failed, avg duration)</li>
@@ -285,20 +285,20 @@ class BookingService
             </ul>
 
             <h2 id="security">Security</h2>
-            <p>Add authentication or authorization middleware in <code>config/tracereplay.php</code>:</p>
-            <pre><code class="language-php">// config/tracereplay.php
-'middleware' => ['web', 'auth', 'can:view-tracereplay'],
+            <p>Add authentication or authorization middleware in <code>config/trace-replay.php</code>:</p>
+            <pre><code class="language-php">// config/trace-replay.php
+'middleware' => ['web', 'auth', 'can:view-trace-replay'],
 
 // AuthServiceProvider
-Gate::define('view-tracereplay', fn ($user) =>
+Gate::define('view-trace-replay', fn ($user) =>
     in_array($user->email, ['admin@example.com'])
 );</code></pre>
             <p>Or restrict by IP (exact match, comma-separated via env):</p>
-            <pre><code class="language-bash">TRACEREPLAY_ALLOWED_IPS=203.0.113.5,10.0.0.1</code></pre>
+            <pre><code class="language-bash">TRACE_REPLAY_ALLOWED_IPS=203.0.113.5,10.0.0.1</code></pre>
 
             <h2 id="data-masking">Data Masking</h2>
             <p>TraceReplay automatically redacts configured keys from all request/response payloads <em>before</em> they touch the database — including deeply nested values:</p>
-            <pre><code class="language-php">// config/tracereplay.php
+            <pre><code class="language-php">// config/trace-replay.php
 'mask_fields' => ['password', 'token', 'secret', 'api_key', 'credit_card'],
 
 // Input:  ['username' => 'alice', 'password' => 'hunter2']
@@ -318,7 +318,7 @@ Gate::define('view-tracereplay', fn ($user) =>
             <p>Configure <code>OPENAI_API_KEY</code> and click <strong>"Ask AI"</strong> to get an answer directly in the dashboard.</p>
 
             <h2 id="mcp-api">MCP / AI-Agent JSON-RPC API</h2>
-            <p>Autonomous agents can query TraceReplay over JSON-RPC 2.0 at <code>POST /api/tracereplay/mcp</code>.</p>
+            <p>Autonomous agents can query TraceReplay over JSON-RPC 2.0 at <code>POST /api/trace-replay/mcp</code>.</p>
             <table>
                 <thead><tr><th>Method</th><th>Params</th><th>Returns</th></tr></thead>
                 <tbody>
@@ -338,14 +338,14 @@ Gate::define('view-tracereplay', fn ($user) =>
             <h2 id="retention">Data Retention</h2>
             <p>Prune old traces automatically via the scheduler:</p>
             <pre><code class="language-php">// app/Console/Kernel.php
-$schedule->command('tracereplay:prune --days=30')->daily();</code></pre>
-            <pre><code class="language-bash">php artisan tracereplay:prune --days=30 --dry-run       # preview
-php artisan tracereplay:prune --days=7 --status=error    # prune only error traces</code></pre>
+$schedule->command('trace-replay:prune --days=30')->daily();</code></pre>
+            <pre><code class="language-bash">php artisan trace-replay:prune --days=30 --dry-run       # preview
+php artisan trace-replay:prune --days=7 --status=error    # prune only error traces</code></pre>
             <p>Export a trace for archiving:</p>
-            <pre><code class="language-bash">php artisan tracereplay:export {id} --format=json
-php artisan tracereplay:export {id} --format=csv
-php artisan tracereplay:export {id} --format=json --output=/tmp/trace.json
-php artisan tracereplay:export --status=error --format=json  # all error traces</code></pre>
+            <pre><code class="language-bash">php artisan trace-replay:export {id} --format=json
+php artisan trace-replay:export {id} --format=csv
+php artisan trace-replay:export {id} --format=json --output=/tmp/trace.json
+php artisan trace-replay:export --status=error --format=json  # all error traces</code></pre>
 
             <h2 id="testing">Testing</h2>
             <pre><code class="language-bash">./vendor/bin/pest</code></pre>
