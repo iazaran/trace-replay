@@ -19,7 +19,11 @@ class TraceReplayAuthMiddleware
         $allowedIps = config('trace-replay.allowed_ips', []);
 
         if (! empty($allowedIps) && ! \in_array($request->ip(), $allowedIps, true)) {
-            abort(403, 'Access to TraceReplay dashboard is restricted.');
+            abort(403, 'Access to TraceReplay dashboard is restricted by IP allowlist.');
+        }
+
+        if (\Illuminate\Support\Facades\Gate::has('view-trace-replay') && ! \Illuminate\Support\Facades\Gate::allows('view-trace-replay')) {
+            abort(403, 'Unauthorized to view TraceReplay dashboard.');
         }
 
         return $next($request);

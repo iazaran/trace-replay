@@ -99,8 +99,11 @@ return [
     | Protect the Trace-Replay dashboard. For production use, add 'auth' or a
     | custom gate middleware, e.g. ['web', 'auth', 'can:view-trace-replay'].
     */
-    'middleware' => ['web'],
-    'api_middleware' => ['api'],
+    'middleware' => ['web', 'auth'],
+    'api' => [
+        'token' => env('TRACE_REPLAY_API_TOKEN'),
+        'middleware' => ['api'],
+    ],
 
     /*
     |--------------------------------------------------------------------------

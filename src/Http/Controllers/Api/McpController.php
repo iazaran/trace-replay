@@ -10,6 +10,30 @@ use TraceReplay\Services\ReplayService;
 
 class McpController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            $token = config('trace-replay.api.token');
+
+            if ($token && $request->header('Authorization') !== 'Bearer '.$token) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Unauthorized: Invalid or missing API token.',
+                ], 401);
+            }
+
+            // If token is NOT set, we allow it ONLY if it's explicitly disabled/enabled?
+            // Recommendation 15 says "Default the API to disabled unless the token is set."
+            if (! $token) {
+                 return response()->json([
+                    'status' => 'error',
+                    'message' => 'API is disabled. Please set TRACE_REPLAY_API_TOKEN in your .env.',
+                ], 403);
+            }
+
+            return $next($request);
+        });
+    }
     public function listTraces(Request $request)
     {
         $query = Trace::withCount('steps')->orderBy('started_at', 'desc');

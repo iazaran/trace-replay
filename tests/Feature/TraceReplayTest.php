@@ -367,7 +367,7 @@ it('dashboard stats endpoint returns JSON', function () {
     Trace::factory()->create(['status' => 'success', 'duration_ms' => 100]);
     Trace::factory()->create(['status' => 'error', 'duration_ms' => 200]);
 
-    $response = $this->getJson('/trace-replay/stats');
+    $response = $this->withToken('test-token')->getJson('/trace-replay/stats');
 
     $response->assertOk();
     $response->assertJsonStructure(['total', 'success', 'failed', 'today', 'failure_rate', 'avg_duration', 'slowest']);
@@ -389,7 +389,7 @@ it('dashboard export downloads JSON file', function () {
 it('MCP list traces returns paginated results', function () {
     Trace::factory()->count(3)->create();
 
-    $response = $this->getJson('/api/trace-replay/mcp/traces');
+    $response = $this->withToken('test-token')->getJson('/api/trace-replay/traces');
 
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
@@ -399,7 +399,7 @@ it('MCP list traces filters by error', function () {
     Trace::factory()->create(['status' => 'success']);
     Trace::factory()->create(['status' => 'error']);
 
-    $response = $this->getJson('/api/trace-replay/mcp/traces?filter_by_error=1');
+    $response = $this->withToken('test-token')->getJson('/api/trace-replay/traces?filter_by_error=1');
 
     $response->assertOk();
     $response->assertJsonPath('data.total', 1);
@@ -408,7 +408,7 @@ it('MCP list traces filters by error', function () {
 it('MCP get context returns trace details', function () {
     $trace = Trace::factory()->create(['status' => 'success']);
 
-    $response = $this->getJson("/api/trace-replay/mcp/traces/{$trace->id}/context");
+    $response = $this->withToken('test-token')->getJson("/api/trace-replay/traces/{$trace->id}/context");
 
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
@@ -425,7 +425,7 @@ it('MCP generate fix prompt returns prompt', function () {
 
     $trace = Trace::latest()->first();
 
-    $response = $this->getJson("/api/trace-replay/mcp/traces/{$trace->id}/fix-prompt");
+    $response = $this->withToken('test-token')->getJson("/api/trace-replay/traces/{$trace->id}/fix-prompt");
 
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
@@ -434,7 +434,7 @@ it('MCP generate fix prompt returns prompt', function () {
 it('MCP RPC list_traces method works', function () {
     Trace::factory()->count(2)->create();
 
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'list_traces',
         'params' => [],
         'id' => 1,
@@ -446,7 +446,7 @@ it('MCP RPC list_traces method works', function () {
 });
 
 it('MCP RPC returns error for unknown method', function () {
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'unknown_method',
         'params' => [],
         'id' => 42,
@@ -461,7 +461,7 @@ it('MCP RPC returns error for unknown method', function () {
 it('MCP RPC get_trace_context method works', function () {
     $trace = Trace::factory()->create(['status' => 'error']);
 
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'get_trace_context',
         'params' => ['trace_id' => $trace->id],
         'id' => 2,
@@ -481,7 +481,7 @@ it('MCP RPC generate_fix_prompt method works', function () {
 
     $trace = Trace::latest()->first();
 
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'generate_fix_prompt',
         'params' => ['trace_id' => $trace->id],
         'id' => 3,
@@ -887,7 +887,7 @@ it('dashboard index ignores invalid status filter', function () {
 it('dashboard replay endpoint returns error for trace without request payload', function () {
     $trace = Trace::factory()->create();
 
-    $response = $this->postJson("/trace-replay/traces/{$trace->id}/replay");
+    $response = $this->withToken('test-token')->postJson("/trace-replay/traces/{$trace->id}/replay");
 
     $response->assertStatus(400);
     $response->assertJsonPath('status', 'error');
@@ -906,7 +906,8 @@ it('dashboard AI prompt endpoint works for error trace', function () {
     $trace = Trace::latest()->first();
 
     // No OpenAI key configured, so ai_response will be null
-    $response = $this->postJson("/trace-replay/traces/{$trace->id}/ai-prompt");
+    $this->withoutExceptionHandling();
+    $response = $this->withToken('test-token')->postJson("/trace-replay/traces/{$trace->id}/ai-prompt");
 
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
@@ -1065,7 +1066,7 @@ it('NotificationService handles null duration_ms in slack', function () {
 it('MCP RPC trigger_replay returns error for trace without payload', function () {
     $trace = Trace::factory()->create();
 
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'trigger_replay',
         'params' => ['trace_id' => $trace->id],
         'id' => 10,
