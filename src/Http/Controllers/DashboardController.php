@@ -54,8 +54,8 @@ class DashboardController extends Controller
         $trace = Trace::with('steps')->findOrFail($id);
         $prompt = $promptService->generateFixPrompt($trace);
 
-        // If OpenAI key is configured, attempt a direct API call
-        $aiResponse = $promptService->callOpenAI($prompt);
+        // Call the configured AI driver (OpenAI, Anthropic, or Ollama)
+        $aiResponse = $promptService->callAi($prompt);
 
         return response()->json([
             'status' => 'success',
@@ -68,22 +68,24 @@ class DashboardController extends Controller
 
     public function stats(): JsonResponse
     {
-        $total = Trace::count();
-        $failed = Trace::failed()->count();
-        $success = Trace::successful()->count();
-        $today = Trace::whereDate('started_at', today())->count();
+        $stats = Trace::selectRaw('
+            count(*) as total,
+            count(case when status = "error" then 1 end) as failed,
+            count(case when status = "success" then 1 end) as success,
+            avg(duration_ms) as avg_duration,
+            max(duration_ms) as slowest
+        ')->first();
 
-        $avgDuration = Trace::whereNotNull('duration_ms')->avg('duration_ms');
-        $slowest = Trace::whereNotNull('duration_ms')->max('duration_ms');
+        $today = Trace::whereDate('started_at', now()->today())->count();
 
         return response()->json([
-            'total' => $total,
-            'success' => $success,
-            'failed' => $failed,
+            'total' => (int) $stats->total,
+            'success' => (int) $stats->success,
+            'failed' => (int) $stats->failed,
             'today' => $today,
-            'failure_rate' => $total > 0 ? round(($failed / $total) * 100, 1) : 0,
-            'avg_duration' => round($avgDuration ?? 0, 2),
-            'slowest' => round($slowest ?? 0, 2),
+            'failure_rate' => $stats->total > 0 ? round(($stats->failed / $stats->total) * 100, 1) : 0,
+            'avg_duration' => round($stats->avg_duration ?? 0, 2),
+            'slowest' => round($stats->slowest ?? 0, 2),
         ]);
     }
 

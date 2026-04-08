@@ -42,16 +42,16 @@
                     >
                     
                     <!-- Marker -->
-                    <div class="flex items-center justify-center w-6 h-6 rounded-full border-2 
-                        {{ $step->status === 'success' ? 'bg-dark-900 border-green-500' : 'bg-dark-900 border-red-500' }} 
-                        z-10 absolute left-0 md:relative md:mx-auto shadow shrink-0 
+                    <div class="flex items-center justify-center w-6 h-6 rounded-full border-2
+                        {{ $step->status === 'success' ? 'bg-dark-900 border-green-500' : 'bg-dark-900 border-red-500' }}
+                        z-10 absolute left-0 md:relative md:mx-auto shadow shrink-0
                         group-hover:scale-125 transition-transform"
-                        x-bind:class="selectedStep?.id === '{{ $step->id }}' ? 'ring-2 ring-brand-500 ring-offset-2 ring-offset-dark-900' : ''">
+                        :class="selectedStep && selectedStep.id === '{{ $step->id }}' ? 'ring-2 ring-brand-500 ring-offset-2 ring-offset-dark-900' : ''">
                     </div>
-                    
+
                     <!-- Label -->
                     <div class="glass-panel relative w-[calc(100%-3rem)] md:w-[calc(50%-1.5rem)] p-3 rounded shadow hover:bg-white/[0.02] transition"
-                        x-bind:class="selectedStep?.id === '{{ $step->id }}' ? 'border-brand-500/50 bg-brand-500/5' : ''">
+                        :class="selectedStep && selectedStep.id === '{{ $step->id }}' ? 'border-brand-500/50 bg-brand-500/5' : ''">
                         <div class="flex items-center justify-between mb-1">
                             <span class="font-medium text-gray-200 text-sm">{{ $step->label }}</span>
                             <span class="text-xs text-gray-500">{{ $step->duration_ms }}ms</span>
@@ -74,16 +74,16 @@
         <div class="glass-panel p-4 rounded-xl shadow-lg flex justify-between items-center">
             <div class="text-sm font-medium text-gray-300">
                 <span x-show="!selectedStep">Select a step from the timeline to inspect</span>
-                <span x-show="selectedStep" x-text="'Inspecting Step: ' + selectedStep?.label"></span>
+                <span x-show="selectedStep" x-text="selectedStep ? 'Inspecting Step: ' + selectedStep.label : ''"></span>
             </div>
             <div class="flex gap-2">
                 @if($trace->status === 'error')
-                    <button @click="generateFixPrompt" 
+                    <button @click="generateFixPrompt()" 
                             class="px-4 py-1.5 text-sm font-medium rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg hover:from-purple-500 hover:to-indigo-500 transition-all flex items-center gap-2">
                         <i data-feather="cpu" class="w-4 h-4"></i> AI Fix Prompt
                     </button>
                 @endif
-                <button @click="replayRequest" 
+                <button @click="replayRequest()" 
                         class="px-4 py-1.5 text-sm font-medium rounded-lg bg-white/10 text-white border border-white/10 hover:bg-white/20 transition-all flex items-center gap-2">
                     <i data-feather="play" class="w-4 h-4"></i> Replay
                 </button>
@@ -105,12 +105,12 @@
 
                 <!-- Step meta row -->
                 <div class="flex flex-wrap gap-3 text-xs text-gray-400" x-show="selectedStep">
-                    <span class="px-2 py-1 rounded bg-dark-700" x-text="'Step #' + selectedStep?.step_order"></span>
-                    <span class="px-2 py-1 rounded bg-dark-700" x-text="selectedStep?.duration_ms + ' ms'"></span>
-                    <span class="px-2 py-1 rounded bg-dark-700" x-show="selectedStep?.db_query_count"
-                          x-text="selectedStep?.db_query_count + ' queries (' + selectedStep?.db_query_time_ms + ' ms)'"></span>
-                    <span class="px-2 py-1 rounded bg-dark-700" x-show="selectedStep?.memory_usage"
-                          x-text="'Mem: ' + Math.round((selectedStep?.memory_usage||0)/1024) + ' KB'"></span>
+                    <span class="px-2 py-1 rounded bg-dark-700" x-text="selectedStep ? 'Step #' + selectedStep.step_order : ''"></span>
+                    <span class="px-2 py-1 rounded bg-dark-700" x-text="selectedStep ? selectedStep.duration_ms + ' ms' : ''"></span>
+                    <span class="px-2 py-1 rounded bg-dark-700" x-show="selectedStep && selectedStep.db_query_count"
+                          x-text="selectedStep ? selectedStep.db_query_count + ' queries (' + selectedStep.db_query_time_ms + ' ms)' : ''"></span>
+                    <span class="px-2 py-1 rounded bg-dark-700" x-show="selectedStep && selectedStep.memory_usage"
+                          x-text="selectedStep ? 'Mem: ' + Math.round((selectedStep.memory_usage||0)/1024) + ' KB' : ''"></span>
                 </div>
 
                 <!-- Request Tab -->
@@ -160,13 +160,13 @@
         </div>
 
         <!-- Waterfall Chart (placed before the inspector, shown in a collapsible) -->
-        <div x-data="{ open: false }" class="glass-panel rounded-xl shadow-lg">
+        <div x-data="{ open: true }" class="glass-panel rounded-xl shadow-lg">
             <button @click="open = !open"
                     class="w-full flex justify-between items-center px-5 py-3 text-sm font-medium text-gray-300 hover:text-white transition">
                 <span class="flex items-center gap-2"><i data-feather="bar-chart-2" class="w-4 h-4"></i> Waterfall Timeline</span>
                 <span x-text="open ? '▲' : '▼'" class="text-xs text-gray-500"></span>
             </button>
-            <div x-show="open" x-cloak class="px-5 pb-4 overflow-x-auto">
+            <div x-show="open" class="px-5 pb-4 overflow-x-auto">
                 @php $totalMs = max($trace->duration_ms ?? 1, 1); @endphp
                 <div class="min-w-max space-y-1 mt-2">
                     @foreach($trace->steps as $step)
@@ -234,7 +234,16 @@
     </div>
 </div>
 
+@endsection
+
+@section('scripts')
 <script>
+    // Store trace data globally so it's available when Alpine initializes
+    window.traceViewerData = {!! json_encode($trace->steps->toArray(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) !!};
+    window.traceId = '{{ $trace->id }}';
+    window.aiPromptUrl = '{{ route('trace-replay.ai.prompt', $trace->id) }}';
+    window.replayUrl = '{{ route('trace-replay.replay', $trace->id) }}';
+
     document.addEventListener('alpine:init', () => {
         Alpine.data('traceViewer', () => ({
             selectedStep: null,
@@ -243,12 +252,9 @@
             aiPromptContent: 'Generating...',
             showReplayModal: false,
             replayData: null,
-            allSteps: [],
+            allSteps: window.traceViewerData || [],
 
             init() {
-                // JSON_HEX_TAG escapes < and > so </script> in error messages
-                // cannot break out of the script block (XSS mitigation).
-                this.allSteps = {!! json_encode($trace->steps->toArray(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) !!};
                 if (this.allSteps.length > 0) {
                     const errorStep = this.allSteps.find(s => s.status === 'error');
                     this.selectStep(errorStep || this.allSteps[0]);
@@ -257,7 +263,7 @@
 
             selectStep(step) {
                 this.selectedStep = step;
-                this.activeTab = step.status === 'error' ? 'error' : 'request';
+                this.activeTab = step && step.status === 'error' ? 'error' : 'request';
             },
 
             formatJSON(obj) {
@@ -277,7 +283,7 @@
                 this.aiPromptContent = 'Generating expert debugging prompt…';
 
                 try {
-                    const response = await fetch(`{{ route('trace-replay.ai.prompt', $trace->id) }}`, {
+                    const response = await fetch(window.aiPromptUrl, {
                         method: 'POST',
                         headers: {
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
@@ -285,7 +291,6 @@
                         }
                     });
                     const data = await response.json();
-                    // Show AI response if available, otherwise just the prompt
                     this.aiPromptContent = data.data.ai_response || data.data.prompt;
                 } catch (e) {
                     this.aiPromptContent = 'Error generating prompt: ' + e.message;
@@ -295,9 +300,9 @@
             async replayRequest() {
                 this.showReplayModal = true;
                 this.replayData = { original: 'Running replay...', replay: 'Waiting...' };
-                
+
                 try {
-                    const response = await fetch(`{{ route('trace-replay.replay', $trace->id) }}`, {
+                    const response = await fetch(window.replayUrl, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
