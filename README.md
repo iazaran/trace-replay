@@ -6,11 +6,11 @@
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
 [![Laravel](https://img.shields.io/badge/Laravel-10%20|%2011%20|%2012%20|%2013-red)](https://laravel.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-90%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen)](#testing)
 
 TraceReplay is not a standard error logger. It is a full-fledged **execution tracer** that captures every step of your complex workflows, reconstructs them with a waterfall timeline, and offers one-click AI debugging when things go wrong.
 
-![TraceReplay Dashboard](https://raw.githubusercontent.com/iazaran/trace-replay/refs/heads/main/art/preview.png)
+![TraceReplay Dashboard](art/preview.png)
 
 ---
 
@@ -23,17 +23,21 @@ TraceReplay is not a standard error logger. It is a full-fledged **execution tra
 | Deterministic HTTP replay | ✅ | ❌ | ❌ | ❌ |
 | Visual JSON diff on replay | ✅ | ❌ | ❌ | ❌ |
 | AI fix-prompt generator | ✅ | ❌ | ❌ | ❌ |
-| MCP / AI-agent JSON-RPC API | ✅ | ❌ | ❌ | ❌ |
+| OpenAI / Anthropic / Ollama | ✅ | ❌ | ❌ | ❌ |
+| Cache & HTTP tracking | ✅ | ✅ | ✅ | ✅ |
+| Mail & Notification tracking | ✅ | ❌ | ❌ | ❌ |
 | DB query tracking per step | ✅ | ✅ | ✅ | ✅ |
 | Memory tracking per step | ✅ | ❌ | ✅ | ✅ |
+| Peak memory tracking | ✅ | ✅ | ❌ | ❌ |
+| Livewire Hydrate Tracing | ✅ | ❌ | ❌ | ❌ |
 | PII / sensitive-field masking | ✅ | ❌ | ❌ | ❌ |
 | Queue-job auto-tracing | ✅ | ✅ | ❌ | ❌ |
 | Artisan-command auto-tracing | ✅ | ✅ | ❌ | ❌ |
-| Sampling rate control | ✅ | ❌ | ❌ | ❌ |
-| Dashboard auth gate | ✅ | ✅ | ❌ | N/A |
-| Pruning / data retention | ✅ | ✅ | ❌ | ❌ |
-| Multi-tenant (workspace/project) | ✅ | ❌ | ❌ | ❌ |
-| Laravel 10 / 11 / 12 support | ✅ | ✅ | ✅ | ✅ |
+| Probabilistic Sampling | ✅ | ❌ | ❌ | ❌ |
+| Dashboard auth & Gate gate | ✅ | ✅ | ❌ | N/A |
+| Multi-tenant scoping | ✅ | ❌ | ❌ | ❌ |
+| W3C Traceparent support | ✅ | ❌ | ❌ | ❌ |
+| Octane Compatible | ✅ | ✅ | ❌ | ❌ |
 
 ---
 
@@ -56,87 +60,50 @@ Run migrations:
 php artisan migrate
 ```
 
-> **Note:** Migrations use `json` columns (not `jsonb`) for full MySQL 5.7+, MariaDB, PostgreSQL, and SQLite compatibility.
+> **Note:** Migrations use `json` columns and support `decimal` precision for timings, compatible with MySQL 5.7+, MariaDB, PostgreSQL, and SQLite.
 
-#### Publishing Views (Recommended)
-
-TraceReplay ships with a polished, dark-themed dashboard featuring a waterfall timeline, syntax-highlighted JSON inspector, and live stats — all styled and ready to use out of the box. Publishing the views lets you customise the layout, colours, or add your own branding:
+#### Publishing Views (Optional)
 
 ```bash
 php artisan vendor:publish --tag=trace-replay-views
 ```
 
-This copies the Blade templates to `resources/views/vendor/trace-replay/` where you can edit them freely. The package will automatically use your published versions instead of its built-in views.
-
 ---
 
 ## ⚙️ Configuration
 
-Open `config/trace-replay.php`. Every option is documented inline; the key ones are:
+Open `config/trace-replay.php`. Key options include:
 
 ```php
 return [
-    // Globally enable or disable tracing (useful for CI)
     'enabled' => env('TRACE_REPLAY_ENABLED', true),
 
-    // Probabilistic sampling — 1.0 = always trace, 0.1 = trace 10% of requests
+    // 0.1 = trace 10% of requests/jobs/commands
     'sample_rate' => env('TRACE_REPLAY_SAMPLE_RATE', 1.0),
 
-    // Multi-tenant project ID (optional)
-    'project_id' => env('TRACE_REPLAY_PROJECT_ID', null),
+    // Automatically mask these keys in payloads
+    'mask_fields' => ['password', 'token', 'api_key', 'authorization', 'secret'],
 
-    // Automatically mask these keys in request/response payloads
-    'mask_fields' => ['password', 'password_confirmation', 'token', 'api_key',
-                      'authorization', 'secret', 'credit_card', 'cvv', 'ssn', 'private_key'],
+    // Dashbord security: only users passing the "view-trace-replay" gate can access
+    'middleware' => ['web', 'auth'],
 
-    // Track DB queries inside each step
-    'track_db_queries' => env('TRACE_REPLAY_TRACK_DB', true),
-
-    // Dashboard route middleware (add 'auth' or custom gate middleware for production)
-    'middleware'     => ['web'],
-    'api_middleware' => ['api'],
-
-    // IP allowlist for the dashboard (exact match; empty = allow all)
-    'allowed_ips' => array_filter(explode(',', env('TRACE_REPLAY_ALLOWED_IPS', ''))),
-
-    // Async step persistence via a queue
-    'queue' => [
-        'enabled'    => env('TRACE_REPLAY_QUEUE_ENABLED', false),
-        'connection' => env('TRACE_REPLAY_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'sync')),
-        'queue'      => env('TRACE_REPLAY_QUEUE_NAME', 'default'),
-    ],
-
-    // Replay engine
-    'replay' => [
-        'default_base_url' => env('TRACE_REPLAY_REPLAY_URL', env('APP_URL', 'http://localhost')),
-        'timeout'          => env('TRACE_REPLAY_REPLAY_TIMEOUT', 30),
-    ],
-
-    // Auto-pruning retention period (days)
-    'retention_days' => env('TRACE_REPLAY_RETENTION_DAYS', 30),
-
-    // Failure notifications (email / Slack webhook)
-    'notifications' => [
-        'on_failure' => env('TRACE_REPLAY_NOTIFY_ON_FAILURE', false),
-        'channels'   => ['mail'],
-        'mail'       => ['to' => env('TRACE_REPLAY_NOTIFY_EMAIL')],
-        'slack'      => ['webhook_url' => env('TRACE_REPLAY_SLACK_WEBHOOK')],
-    ],
-
-    // OpenAI integration for in-dashboard AI responses
+    // AI Troubleshooting (Drivers: openai, anthropic, ollama)
     'ai' => [
-        'openai_api_key' => env('TRACE_REPLAY_OPENAI_KEY'),
-        'model'          => env('TRACE_REPLAY_OPENAI_MODEL', 'gpt-4o'),
+        'driver' => env('TRACE_REPLAY_AI_DRIVER', 'openai'),
+        'api_key' => env('TRACE_REPLAY_AI_KEY'),
+        'model' => env('TRACE_REPLAY_AI_MODEL', 'gpt-4o'),
     ],
 
-    // Auto-tracing for jobs and artisan commands (registered automatically)
+    // Async batch persistence via queue (Reduces overhead)
+    'queue' => [
+        'enabled' => env('TRACE_REPLAY_QUEUE_ENABLED', false),
+    ],
+
+    // Auto-tracing
     'auto_trace' => [
-        'jobs'     => env('TRACE_REPLAY_AUTO_TRACE_JOBS', true),
-        'commands' => env('TRACE_REPLAY_AUTO_TRACE_COMMANDS', false),
-        'exclude_commands' => [
-            'queue:work', 'queue:listen', 'horizon', 'schedule:run',
-            'schedule:work', 'trace-replay:prune', 'trace-replay:export',
-        ],
+        'jobs'     => true,
+        'commands' => false,
+        'livewire' => true,
     ],
 ];
 ```
@@ -192,6 +159,44 @@ class BookingService
 | `TraceReplay::context(array)` | Merge data into the next step's `state_snapshot` |
 | `TraceReplay::end(status)` | Finalise trace; status: `success` or `error` |
 | `TraceReplay::getCurrentTrace()` | Returns the active `Trace` model (or `null`) |
+| `TraceReplay::setWorkspaceId(id)` | Scope subsequent traces to a workspace |
+| `TraceReplay::setProjectId(id)` | Scope subsequent traces to a project |
+
+---
+
+### Testing Helper
+
+Use `TraceReplay::fake()` to verify your instrumentation in tests without hitting the database:
+
+```php
+use TraceReplay\Facades\TraceReplay;
+
+public function test_booking_records_steps()
+{
+    $fake = TraceReplay::fake();
+
+    $this->post('/book', ['flight_id' => 123]);
+
+    $fake->assertTraceStarted('Flight Booking');
+    $fake->assertStepRecorded('Validate Inventory');
+    $fake->assertStepRecorded('Charge Credit Card');
+    $fake->assertCheckpointRecorded('Inventory validated');
+    $fake->assertTraceEnded('success');
+    $fake->assertTraceCount(1);
+}
+```
+
+**Available assertions:**
+
+| Assertion | Description |
+|---|---|
+| `assertTraceStarted(name)` | Assert a trace with the given name was started |
+| `assertNoTraceStarted()` | Assert no trace was started at all |
+| `assertTraceCount(n)` | Assert exactly `n` traces were started |
+| `assertStepRecorded(label)` | Assert a step with the given label was recorded |
+| `assertCheckpointRecorded(label)` | Assert a checkpoint with the given label was recorded |
+| `assertStepCount(n, traceName?)` | Assert exactly `n` steps in total (or in a named trace) |
+| `assertTraceEnded(status)` | Assert a trace with the given final status exists |
 
 ---
 
@@ -366,7 +371,7 @@ composer install
 ./vendor/bin/pest
 ```
 
-90 tests, 183 assertions. The test suite covers:
+101 tests, 200 assertions. The test suite covers:
 - Trace lifecycle (start, step, checkpoint, context, end, duration precision)
 - Error capturing, step ordering, DB query tracking
 - Model scopes (`failed`, `successful`, `search`)
@@ -380,6 +385,9 @@ composer install
 - Middleware — TraceMiddleware (route skipping, disabled config), AuthMiddleware (IP allow/block)
 - Artisan `trace-replay:prune` (delete, dry-run, status filter, validation)
 - Artisan `trace-replay:export` (JSON, CSV, file output, status filter, validation)
+- `TraceReplayFake` — assertions for started/count/steps/checkpoints/ended
+- Log call tracking per step
+- `NotificationService` — error_reason array/string serialisation safety
 - Blade components — TraceBar rendering with enabled/disabled states
 
 ---
