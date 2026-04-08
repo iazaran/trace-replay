@@ -11,10 +11,6 @@ class JobTraceListener
 {
     public function onJobProcessing(JobProcessing $event): void
     {
-        if (! config('trace-replay.auto_trace.jobs', true)) {
-            return;
-        }
-
         $jobName = $this->resolveJobName($event->job->payload());
 
         TraceReplay::start("Job: {$jobName}", [
@@ -30,10 +26,6 @@ class JobTraceListener
 
     public function onJobProcessed(JobProcessed $_event): void
     {
-        if (! config('trace-replay.auto_trace.jobs', true)) {
-            return;
-        }
-
         TraceReplay::checkpoint('Job Completed');
         TraceReplay::end('success');
     }

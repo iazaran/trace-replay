@@ -10,17 +10,7 @@ class CommandTraceListener
 {
     public function onCommandStarting(CommandStarting $event): void
     {
-        if (! config('trace-replay.auto_trace.commands', false)) {
-            return;
-        }
-
-        // $command is ?string in some Laravel versions (e.g. when a command is anonymous)
-        if (empty($event->command)) {
-            return;
-        }
-
-        $excluded = config('trace-replay.auto_trace.exclude_commands', []);
-        if (\in_array($event->command, $excluded, true)) {
+        if ($this->shouldIgnore($event->command)) {
             return;
         }
 
@@ -34,16 +24,7 @@ class CommandTraceListener
 
     public function onCommandFinished(CommandFinished $event): void
     {
-        if (! config('trace-replay.auto_trace.commands', false)) {
-            return;
-        }
-
-        if (empty($event->command)) {
-            return;
-        }
-
-        $excluded = config('trace-replay.auto_trace.exclude_commands', []);
-        if (\in_array($event->command, $excluded, true)) {
+        if ($this->shouldIgnore($event->command)) {
             return;
         }
 
@@ -58,5 +39,16 @@ class CommandTraceListener
         ]);
 
         TraceReplay::end($status);
+    }
+
+    protected function shouldIgnore(?string $command): bool
+    {
+        if (empty($command)) {
+            return true;
+        }
+
+        $excluded = config('trace-replay.auto_trace.exclude_commands', []);
+
+        return \in_array($command, $excluded, true);
     }
 }

@@ -29,7 +29,7 @@ class TraceReplayServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/trace-replay.php', 'trace-replay');
 
-        $this->app->singleton('trace-replay', fn ($app) => new TraceReplayManager($app));
+        $this->app->scoped('trace-replay', fn ($app) => new TraceReplayManager($app));
 
         $this->app->singleton(PayloadMasker::class);
         $this->app->singleton(AiDriverInterface::class, function ($app) {
@@ -90,5 +90,36 @@ class TraceReplayServiceProvider extends ServiceProvider
             Event::listen(CommandStarting::class, fn (CommandStarting $e) => $this->app->make(CommandTraceListener::class)->onCommandStarting($e));
             Event::listen(CommandFinished::class, fn (CommandFinished $e) => $this->app->make(CommandTraceListener::class)->onCommandFinished($e));
         }
+
+        // Auto-trace Livewire components
+        if (config('trace-replay.auto_trace.livewire', true) && class_exists(\Livewire\Livewire::class)) {
+            try {
+                \Livewire\Livewire::listen('component.hydrate', function ($component, $request) {
+                    \TraceReplay\Facades\TraceReplay::checkpoint('Livewire Hydrate: ' . get_class($component));
+                });
+                \Livewire\Livewire::listen('component.dehydrate', function ($component, $response) {
+                    \TraceReplay\Facades\TraceReplay::checkpoint('Livewire Dehydrate: ' . get_class($component));
+                });
+            } catch (\Throwable $e) {
+                // Ignore if hook registration fails for specific versions
+            }
+        }
+
+        // Register global collectors for active traces
+        Event::listen([
+            \Illuminate\Cache\Events\CacheHit::class,
+            \Illuminate\Cache\Events\CacheMissed::class,
+            \Illuminate\Cache\Events\KeyForgotten::class,
+            \Illuminate\Cache\Events\KeyWritten::class,
+            \Illuminate\Http\Client\Events\RequestSending::class,
+            \Illuminate\Http\Client\Events\ResponseReceived::class,
+            \Illuminate\Mail\Events\MessageSending::class,
+            \Illuminate\Notifications\Events\NotificationSending::class,
+            \Illuminate\Log\Events\MessageLogged::class,
+        ], function ($event) {
+            if ($this->app->bound('trace-replay')) {
+                $this->app->make('trace-replay')->recordEvent($event);
+            }
+        });
     }
 }
