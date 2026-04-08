@@ -4,6 +4,7 @@ namespace TraceReplay\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -22,7 +23,7 @@ class TraceReplayAuthMiddleware
             abort(403, 'Access to TraceReplay dashboard is restricted by IP allowlist.');
         }
 
-        if (\Illuminate\Support\Facades\Gate::has('view-trace-replay') && ! \Illuminate\Support\Facades\Gate::allows('view-trace-replay')) {
+        if (Gate::has('view-trace-replay') && ! Gate::allows('view-trace-replay')) {
             abort(403, 'Unauthorized to view TraceReplay dashboard.');
         }
 

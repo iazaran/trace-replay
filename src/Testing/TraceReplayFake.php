@@ -4,7 +4,6 @@ namespace TraceReplay\Testing;
 
 use PHPUnit\Framework\Assert as PHPUnit;
 use TraceReplay\Models\Trace;
-use TraceReplay\Models\TraceStep;
 
 class TraceReplayFake
 {
@@ -14,13 +13,10 @@ class TraceReplayFake
     /** @var array<string, mixed>|null */
     protected ?array $currentTrace = null;
 
-    /** @var string|null */
     protected ?string $workspaceId = null;
 
-    /** @var string|null */
     protected ?string $projectId = null;
 
-    /** @var string|null */
     protected ?string $traceParent = null;
 
     public function start(string $name, array $tags = [], bool $forceSample = false): Trace

@@ -25,7 +25,7 @@ class McpController extends Controller
             // If token is NOT set, we allow it ONLY if it's explicitly disabled/enabled?
             // Recommendation 15 says "Default the API to disabled unless the token is set."
             if (! $token) {
-                 return response()->json([
+                return response()->json([
                     'status' => 'error',
                     'message' => 'API is disabled. Please set TRACE_REPLAY_API_TOKEN in your .env.',
                 ], 403);
@@ -34,6 +34,7 @@ class McpController extends Controller
             return $next($request);
         });
     }
+
     public function listTraces(Request $request)
     {
         $query = Trace::withCount('steps')->orderBy('started_at', 'desc');

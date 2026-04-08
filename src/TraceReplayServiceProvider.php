@@ -2,15 +2,26 @@
 
 namespace TraceReplay;
 
+use Illuminate\Cache\Events\CacheHit;
+use Illuminate\Cache\Events\CacheMissed;
+use Illuminate\Cache\Events\KeyForgotten;
+use Illuminate\Cache\Events\KeyWritten;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Http\Client\Events\RequestSending;
+use Illuminate\Http\Client\Events\ResponseReceived;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 use TraceReplay\Console\Commands\ExportTraceCommand;
 use TraceReplay\Console\Commands\PruneTracesCommand;
+use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Listeners\CommandTraceListener;
 use TraceReplay\Listeners\JobTraceListener;
 use TraceReplay\Services\Ai\AiDriverInterface;
@@ -36,9 +47,9 @@ class TraceReplayServiceProvider extends ServiceProvider
             $driver = config('trace-replay.ai.driver', 'openai');
 
             return match ($driver) {
-                'anthropic' => new AnthropicDriver(),
-                'ollama' => new OllamaDriver(),
-                default => new OpenAiDriver(),
+                'anthropic' => new AnthropicDriver,
+                'ollama' => new OllamaDriver,
+                default => new OpenAiDriver,
             };
         });
         $this->app->singleton(AiPromptService::class);
@@ -92,13 +103,13 @@ class TraceReplayServiceProvider extends ServiceProvider
         }
 
         // Auto-trace Livewire components
-        if (config('trace-replay.auto_trace.livewire', true) && class_exists(\Livewire\Livewire::class)) {
+        if (config('trace-replay.auto_trace.livewire', true) && class_exists(Livewire::class)) {
             try {
-                \Livewire\Livewire::listen('component.hydrate', function ($component, $request) {
-                    \TraceReplay\Facades\TraceReplay::checkpoint('Livewire Hydrate: ' . get_class($component));
+                Livewire::listen('component.hydrate', function ($component, $request) {
+                    TraceReplay::checkpoint('Livewire Hydrate: '.get_class($component));
                 });
-                \Livewire\Livewire::listen('component.dehydrate', function ($component, $response) {
-                    \TraceReplay\Facades\TraceReplay::checkpoint('Livewire Dehydrate: ' . get_class($component));
+                Livewire::listen('component.dehydrate', function ($component, $response) {
+                    TraceReplay::checkpoint('Livewire Dehydrate: '.get_class($component));
                 });
             } catch (\Throwable $e) {
                 // Ignore if hook registration fails for specific versions
@@ -107,15 +118,15 @@ class TraceReplayServiceProvider extends ServiceProvider
 
         // Register global collectors for active traces
         Event::listen([
-            \Illuminate\Cache\Events\CacheHit::class,
-            \Illuminate\Cache\Events\CacheMissed::class,
-            \Illuminate\Cache\Events\KeyForgotten::class,
-            \Illuminate\Cache\Events\KeyWritten::class,
-            \Illuminate\Http\Client\Events\RequestSending::class,
-            \Illuminate\Http\Client\Events\ResponseReceived::class,
-            \Illuminate\Mail\Events\MessageSending::class,
-            \Illuminate\Notifications\Events\NotificationSending::class,
-            \Illuminate\Log\Events\MessageLogged::class,
+            CacheHit::class,
+            CacheMissed::class,
+            KeyForgotten::class,
+            KeyWritten::class,
+            RequestSending::class,
+            ResponseReceived::class,
+            MessageSending::class,
+            NotificationSending::class,
+            MessageLogged::class,
         ], function ($event) {
             if ($this->app->bound('trace-replay')) {
                 $this->app->make('trace-replay')->recordEvent($event);

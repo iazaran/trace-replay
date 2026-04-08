@@ -2,9 +2,8 @@
 
 namespace TraceReplay\Services;
 
-use Illuminate\Support\Facades\Http;
-use TraceReplay\Services\Ai\AiDriverInterface;
 use TraceReplay\Models\Trace;
+use TraceReplay\Services\Ai\AiDriverInterface;
 
 class AiPromptService
 {
@@ -14,6 +13,7 @@ class AiPromptService
     {
         $this->driver = $driver;
     }
+
     /**
      * Build a rich, structured debugging prompt from a failed trace.
      */

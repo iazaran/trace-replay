@@ -17,10 +17,10 @@ class AnthropicDriver implements AiDriverInterface
         }
 
         $response = Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'content-type' => 'application/json',
-            ])
+            'x-api-key' => $apiKey,
+            'anthropic-version' => '2023-06-01',
+            'content-type' => 'application/json',
+        ])
             ->timeout(60)
             ->post('https://api.anthropic.com/v1/messages', [
                 'model' => $model,

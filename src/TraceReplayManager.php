@@ -8,10 +8,11 @@ use Illuminate\Cache\Events\KeyForgotten;
 use Illuminate\Cache\Events\KeyWritten;
 use Illuminate\Http\Client\Events\RequestSending as HttpRequestSending;
 use Illuminate\Http\Client\Events\ResponseReceived as HttpResponseReceived;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 use Throwable;
 use TraceReplay\Jobs\PersistTraceStepJob;
 use TraceReplay\Models\Trace;
@@ -256,18 +257,18 @@ class TraceReplayManager
         $this->stepCounter++;
 
         $step = new TraceStep([
-            'trace_id'         => $this->currentTrace->id,
-            'label'            => $label,
-            'type'             => 'checkpoint',
-            'status'           => 'checkpoint',
-            'step_order'       => $this->stepCounter,
-            'duration_ms'      => 0,
-            'memory_usage'     => 0,
-            'db_query_count'   => 0,
+            'trace_id' => $this->currentTrace->id,
+            'label' => $label,
+            'type' => 'checkpoint',
+            'status' => 'checkpoint',
+            'step_order' => $this->stepCounter,
+            'duration_ms' => 0,
+            'memory_usage' => 0,
+            'db_query_count' => 0,
             'db_query_time_ms' => 0,
-            'cache_hit_count'  => 0,
+            'cache_hit_count' => 0,
             'cache_miss_count' => 0,
-            'state_snapshot'   => [...$state, ...$this->pendingContext],
+            'state_snapshot' => [...$state, ...$this->pendingContext],
         ]);
 
         $this->pendingContext = [];
@@ -323,6 +324,7 @@ class TraceReplayManager
         // trace that the outer context is still managing.
         if ($this->traceDepth > 0) {
             $this->traceDepth--;
+
             return;
         }
 
@@ -415,7 +417,7 @@ class TraceReplayManager
                     'to' => method_exists($event, 'message') ? array_keys($event->message?->getTo() ?? []) : null,
                     'time' => microtime(true),
                 ];
-            } elseif ($event instanceof \Illuminate\Log\Events\MessageLogged) {
+            } elseif ($event instanceof MessageLogged) {
                 $frame['log_calls'][] = [
                     'level' => $event->level,
                     'message' => $event->message,
@@ -468,10 +470,11 @@ class TraceReplayManager
 
         if (! config('trace-replay.batch_persistence', true)) {
             try {
-                 $this->lastStep = TraceStep::create($stepData);
+                $this->lastStep = TraceStep::create($stepData);
             } catch (Throwable $e) {
-                 $this->handleInternalError($e);
+                $this->handleInternalError($e);
             }
+
             return;
         }
 
@@ -496,7 +499,7 @@ class TraceReplayManager
             $now = now();
             $rows = [];
             foreach ($this->stepBuffer as $item) {
-                $row = array_merge(['id' => (string) \Illuminate\Support\Str::uuid(),
+                $row = array_merge(['id' => (string) Str::uuid(),
                     'created_at' => $now, 'updated_at' => $now], $item);
                 foreach ($jsonFields as $field) {
                     if (array_key_exists($field, $row) && (is_array($row[$field]) || is_object($row[$field]))) {
@@ -511,13 +514,13 @@ class TraceReplayManager
 
             // Columns with NOT NULL + integer/float defaults that cannot be null
             $intDefaults = [
-                'cache_hit_count'  => 0,
+                'cache_hit_count' => 0,
                 'cache_miss_count' => 0,
-                'db_query_count'   => 0,
+                'db_query_count' => 0,
                 'db_query_time_ms' => 0,
-                'memory_usage'     => 0,
-                'step_order'       => 0,
-                'duration_ms'      => 0,
+                'memory_usage' => 0,
+                'step_order' => 0,
+                'duration_ms' => 0,
             ];
 
             // Normalise every row so it has every key (null for absent optional columns,
@@ -528,6 +531,7 @@ class TraceReplayManager
                         $row[$key] = $intDefaults[$key] ?? null;
                     }
                 }
+
                 return $row;
             }, $rows);
 

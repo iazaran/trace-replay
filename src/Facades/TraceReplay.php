@@ -3,7 +3,7 @@
 namespace TraceReplay\Facades;
 
 use Illuminate\Support\Facades\Facade;
-use TraceReplay\Models\Trace;
+use TraceReplay\Testing\TraceReplayFake;
 use TraceReplay\TraceReplayManager;
 
 /**
@@ -21,19 +21,20 @@ use TraceReplay\TraceReplayManager;
  * @method static void recordEvent(mixed $event)
  * @method static \TraceReplay\Testing\TraceReplayFake fake()
  *
- * @see \TraceReplay\TraceReplayManager
+ * @see TraceReplayManager
  */
 class TraceReplay extends Facade
 {
     /**
      * Replace the bound instance with a fake.
      */
-    public static function fake(): \TraceReplay\Testing\TraceReplayFake
+    public static function fake(): TraceReplayFake
     {
-        static::swap($fake = new \TraceReplay\Testing\TraceReplayFake());
+        static::swap($fake = new TraceReplayFake);
 
         return $fake;
     }
+
     protected static function getFacadeAccessor(): string
     {
         return 'trace-replay';

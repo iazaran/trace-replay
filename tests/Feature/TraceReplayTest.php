@@ -1,13 +1,16 @@
 <?php
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\AssertionFailedError;
 use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Models\Project;
 use TraceReplay\Models\Trace;
 use TraceReplay\Models\TraceStep;
 use TraceReplay\Models\Workspace;
+use TraceReplay\Services\Ai\AiDriverInterface;
 use TraceReplay\Services\AiPromptService;
 use TraceReplay\Services\NotificationService;
 use TraceReplay\Services\PayloadMasker;
@@ -919,7 +922,7 @@ it('dashboard AI prompt endpoint works for error trace', function () {
 it('AiDriver returns null when it is disabled (no key)', function () {
     config(['trace-replay.ai.api_key' => null]);
 
-    $result = app(\TraceReplay\Services\Ai\AiDriverInterface::class)->complete('test prompt');
+    $result = app(AiDriverInterface::class)->complete('test prompt');
 
     expect($result)->toBeNull();
 });
@@ -927,13 +930,13 @@ it('AiDriver returns null when it is disabled (no key)', function () {
 it('AiDriver returns response when key configured', function () {
     config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.driver' => 'openai']);
 
-    Illuminate\Support\Facades\Http::fake([
-        'api.openai.com/*' => Illuminate\Support\Facades\Http::response([
+    Http::fake([
+        'api.openai.com/*' => Http::response([
             'choices' => [['message' => ['content' => 'AI fix suggestion']]],
         ]),
     ]);
 
-    $result = app(\TraceReplay\Services\Ai\AiDriverInterface::class)->complete('test prompt');
+    $result = app(AiDriverInterface::class)->complete('test prompt');
 
     expect($result)->toBe('AI fix suggestion');
 });
@@ -941,11 +944,11 @@ it('AiDriver returns response when key configured', function () {
 it('AiDriver returns null on API failure', function () {
     config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.driver' => 'openai']);
 
-    Illuminate\Support\Facades\Http::fake([
-        'api.openai.com/*' => Illuminate\Support\Facades\Http::response([], 500),
+    Http::fake([
+        'api.openai.com/*' => Http::response([], 500),
     ]);
 
-    $result = app(\TraceReplay\Services\Ai\AiDriverInterface::class)->complete('test prompt');
+    $result = app(AiDriverInterface::class)->complete('test prompt');
 
     expect($result)->toBeNull();
 });
@@ -1084,7 +1087,7 @@ it('step records log_calls when a log message is emitted inside the step', funct
     TraceReplay::start('Log Tracking');
 
     TraceReplay::step('Logging Step', function () {
-        \Illuminate\Support\Facades\Log::info('Something happened', ['key' => 'value']);
+        Log::info('Something happened', ['key' => 'value']);
     });
 
     $step = TraceReplay::getCurrentTrace()->steps()->first();
@@ -1145,7 +1148,7 @@ it('TraceReplayFake setWorkspaceId, setProjectId, setTraceParent are callable wi
     $fake->setProjectId('proj-1');
     $fake->setTraceParent('00-abc-01');
     $fake->captureResponseOnLastStep(['body' => 'ok'], 200);
-    $fake->recordEvent(new stdClass());
+    $fake->recordEvent(new stdClass);
 
     expect(true)->toBeTrue(); // Reached without exception
 });
@@ -1172,7 +1175,7 @@ it('TraceReplayFake assertCheckpointRecorded fails when checkpoint is missing', 
     $fake->end();
 
     expect(fn () => $fake->assertCheckpointRecorded('Missing Checkpoint'))
-        ->toThrow(\PHPUnit\Framework\AssertionFailedError::class);
+        ->toThrow(AssertionFailedError::class);
 });
 
 it('TraceReplayFake assertNoTraceStarted passes when no trace started', function () {
@@ -1186,7 +1189,7 @@ it('TraceReplayFake assertNoTraceStarted fails when a trace was started', functi
     $fake->start('Something');
 
     expect(fn () => $fake->assertNoTraceStarted())
-        ->toThrow(\PHPUnit\Framework\AssertionFailedError::class);
+        ->toThrow(AssertionFailedError::class);
 });
 
 it('TraceReplayFake assertTraceCount passes with correct count', function () {
@@ -1205,5 +1208,5 @@ it('TraceReplayFake assertTraceCount fails with wrong count', function () {
     $fake->end();
 
     expect(fn () => $fake->assertTraceCount(3))
-        ->toThrow(\PHPUnit\Framework\AssertionFailedError::class);
+        ->toThrow(AssertionFailedError::class);
 });
