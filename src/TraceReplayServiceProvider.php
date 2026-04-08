@@ -13,6 +13,10 @@ use TraceReplay\Console\Commands\ExportTraceCommand;
 use TraceReplay\Console\Commands\PruneTracesCommand;
 use TraceReplay\Listeners\CommandTraceListener;
 use TraceReplay\Listeners\JobTraceListener;
+use TraceReplay\Services\Ai\AiDriverInterface;
+use TraceReplay\Services\Ai\Drivers\AnthropicDriver;
+use TraceReplay\Services\Ai\Drivers\OllamaDriver;
+use TraceReplay\Services\Ai\Drivers\OpenAiDriver;
 use TraceReplay\Services\AiPromptService;
 use TraceReplay\Services\NotificationService;
 use TraceReplay\Services\PayloadMasker;
@@ -28,6 +32,15 @@ class TraceReplayServiceProvider extends ServiceProvider
         $this->app->singleton('trace-replay', fn ($app) => new TraceReplayManager($app));
 
         $this->app->singleton(PayloadMasker::class);
+        $this->app->singleton(AiDriverInterface::class, function ($app) {
+            $driver = config('trace-replay.ai.driver', 'openai');
+
+            return match ($driver) {
+                'anthropic' => new AnthropicDriver(),
+                'ollama' => new OllamaDriver(),
+                default => new OpenAiDriver(),
+            };
+        });
         $this->app->singleton(AiPromptService::class);
         $this->app->singleton(NotificationService::class);
         $this->app->singleton(ReplayService::class, fn ($app) => new ReplayService(

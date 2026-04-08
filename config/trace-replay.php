@@ -142,8 +142,10 @@ return [
     | receive a copyable prompt instead (no external call is made).
     */
     'ai' => [
-        'openai_api_key' => env('TRACE_REPLAY_OPENAI_KEY', null),
-        'model' => env('TRACE_REPLAY_OPENAI_MODEL', 'gpt-4o'),
+        'driver' => env('TRACE_REPLAY_AI_DRIVER', 'openai'), // openai, anthropic, ollama
+        'api_key' => env('TRACE_REPLAY_AI_KEY', env('TRACE_REPLAY_OPENAI_KEY')),
+        'model' => env('TRACE_REPLAY_AI_MODEL', 'gpt-4o'),
+        'base_url' => env('TRACE_REPLAY_AI_BASE_URL'), // For Ollama or custom endpoints
     ],
 
     /*
