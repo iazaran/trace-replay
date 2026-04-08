@@ -24,6 +24,12 @@ class ReplayService
 
         $payload = $initialStep->request_payload;
         $method = strtoupper($payload['method'] ?? 'GET');
+
+        // Safety check for mutating methods (Recommendation 12)
+        $mutatingMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+        if (in_array($method, $mutatingMethods) && ! config('trace-replay.replay.allow_mutating_methods', false)) {
+            throw new \Exception("Replaying mutating methods ({$method}) is disabled for safety. Enable 'replay.allow_mutating_methods' in config to override.");
+        }
         $uri = $payload['uri'] ?? '/';
         $headers = $payload['headers'] ?? [];
         $body = $payload['body'] ?? [];
@@ -78,7 +84,17 @@ class ReplayService
                 if (is_array($value) && is_array($replay[$key])) {
                     $diff[$key] = $this->generateDiff($value, $replay[$key]);
                 } else {
-                    $diff[$key] = ['status' => 'changed', 'original' => $value, 'replay' => $replay[$key]];
+                    // Handle scalar vs array type changes (Recommendation 37)
+                    $diff[$key] = [
+                        'status' => is_array($value) !== is_array($replay[$key]) ? 'type_changed' : 'changed',
+                        'original' => $value,
+                        'replay' => $replay[$key],
+                    ];
+
+                    if (is_array($value) !== is_array($replay[$key])) {
+                        $diff[$key]['original_type'] = gettype($value);
+                        $diff[$key]['replay_type'] = gettype($replay[$key]);
+                    }
                 }
             } else {
                 $diff[$key] = ['status' => 'unchanged', 'value' => $value];

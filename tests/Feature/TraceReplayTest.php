@@ -1,13 +1,16 @@
 <?php
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\AssertionFailedError;
 use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Models\Project;
 use TraceReplay\Models\Trace;
 use TraceReplay\Models\TraceStep;
 use TraceReplay\Models\Workspace;
+use TraceReplay\Services\Ai\AiDriverInterface;
 use TraceReplay\Services\AiPromptService;
 use TraceReplay\Services\NotificationService;
 use TraceReplay\Services\PayloadMasker;
@@ -28,7 +31,7 @@ it('can start and end a trace', function () {
     $fresh = $trace->fresh();
     expect($fresh->status)->toBe('success')
         ->and($fresh->completed_at)->not->toBeNull()
-        ->and($fresh->duration_ms)->toBeFloat(); // precision may be tiny negative due to clock resolution
+        ->and($fresh->duration_ms)->toBeNumeric(); // precision may be tiny negative due to clock resolution
 });
 
 it('returns null from start() when tracing is disabled', function () {
@@ -367,7 +370,7 @@ it('dashboard stats endpoint returns JSON', function () {
     Trace::factory()->create(['status' => 'success', 'duration_ms' => 100]);
     Trace::factory()->create(['status' => 'error', 'duration_ms' => 200]);
 
-    $response = $this->getJson('/trace-replay/stats');
+    $response = $this->withToken('test-token')->getJson('/trace-replay/stats');
 
     $response->assertOk();
     $response->assertJsonStructure(['total', 'success', 'failed', 'today', 'failure_rate', 'avg_duration', 'slowest']);
@@ -389,7 +392,7 @@ it('dashboard export downloads JSON file', function () {
 it('MCP list traces returns paginated results', function () {
     Trace::factory()->count(3)->create();
 
-    $response = $this->getJson('/api/trace-replay/mcp/traces');
+    $response = $this->withToken('test-token')->getJson('/api/trace-replay/traces');
 
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
@@ -399,7 +402,7 @@ it('MCP list traces filters by error', function () {
     Trace::factory()->create(['status' => 'success']);
     Trace::factory()->create(['status' => 'error']);
 
-    $response = $this->getJson('/api/trace-replay/mcp/traces?filter_by_error=1');
+    $response = $this->withToken('test-token')->getJson('/api/trace-replay/traces?filter_by_error=1');
 
     $response->assertOk();
     $response->assertJsonPath('data.total', 1);
@@ -408,7 +411,7 @@ it('MCP list traces filters by error', function () {
 it('MCP get context returns trace details', function () {
     $trace = Trace::factory()->create(['status' => 'success']);
 
-    $response = $this->getJson("/api/trace-replay/mcp/traces/{$trace->id}/context");
+    $response = $this->withToken('test-token')->getJson("/api/trace-replay/traces/{$trace->id}/context");
 
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
@@ -425,7 +428,7 @@ it('MCP generate fix prompt returns prompt', function () {
 
     $trace = Trace::latest()->first();
 
-    $response = $this->getJson("/api/trace-replay/mcp/traces/{$trace->id}/fix-prompt");
+    $response = $this->withToken('test-token')->getJson("/api/trace-replay/traces/{$trace->id}/fix-prompt");
 
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
@@ -434,7 +437,7 @@ it('MCP generate fix prompt returns prompt', function () {
 it('MCP RPC list_traces method works', function () {
     Trace::factory()->count(2)->create();
 
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'list_traces',
         'params' => [],
         'id' => 1,
@@ -446,7 +449,7 @@ it('MCP RPC list_traces method works', function () {
 });
 
 it('MCP RPC returns error for unknown method', function () {
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'unknown_method',
         'params' => [],
         'id' => 42,
@@ -461,7 +464,7 @@ it('MCP RPC returns error for unknown method', function () {
 it('MCP RPC get_trace_context method works', function () {
     $trace = Trace::factory()->create(['status' => 'error']);
 
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'get_trace_context',
         'params' => ['trace_id' => $trace->id],
         'id' => 2,
@@ -481,7 +484,7 @@ it('MCP RPC generate_fix_prompt method works', function () {
 
     $trace = Trace::latest()->first();
 
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'generate_fix_prompt',
         'params' => ['trace_id' => $trace->id],
         'id' => 3,
@@ -887,7 +890,7 @@ it('dashboard index ignores invalid status filter', function () {
 it('dashboard replay endpoint returns error for trace without request payload', function () {
     $trace = Trace::factory()->create();
 
-    $response = $this->postJson("/trace-replay/traces/{$trace->id}/replay");
+    $response = $this->withToken('test-token')->postJson("/trace-replay/traces/{$trace->id}/replay");
 
     $response->assertStatus(400);
     $response->assertJsonPath('status', 'error');
@@ -906,25 +909,26 @@ it('dashboard AI prompt endpoint works for error trace', function () {
     $trace = Trace::latest()->first();
 
     // No OpenAI key configured, so ai_response will be null
-    $response = $this->postJson("/trace-replay/traces/{$trace->id}/ai-prompt");
+    $this->withoutExceptionHandling();
+    $response = $this->withToken('test-token')->postJson("/trace-replay/traces/{$trace->id}/ai-prompt");
 
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
     $response->assertJsonStructure(['data' => ['prompt', 'ai_response']]);
 });
 
-// ── AiPromptService::callOpenAI ────────────────────────────────────────────
+// ── AiDriverInterface ────────────────────────────────────────────
 
-it('AiPromptService callOpenAI returns null when no key configured', function () {
-    config(['trace-replay.ai.openai_api_key' => null]);
+it('AiDriver returns null when it is disabled (no key)', function () {
+    config(['trace-replay.ai.api_key' => null]);
 
-    $result = app(AiPromptService::class)->callOpenAI('test prompt');
+    $result = app(AiDriverInterface::class)->complete('test prompt');
 
     expect($result)->toBeNull();
 });
 
-it('AiPromptService callOpenAI returns response when key configured', function () {
-    config(['trace-replay.ai.openai_api_key' => 'test-key']);
+it('AiDriver returns response when key configured', function () {
+    config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.driver' => 'openai']);
 
     Http::fake([
         'api.openai.com/*' => Http::response([
@@ -932,19 +936,19 @@ it('AiPromptService callOpenAI returns response when key configured', function (
         ]),
     ]);
 
-    $result = app(AiPromptService::class)->callOpenAI('test prompt');
+    $result = app(AiDriverInterface::class)->complete('test prompt');
 
     expect($result)->toBe('AI fix suggestion');
 });
 
-it('AiPromptService callOpenAI returns null on API failure', function () {
-    config(['trace-replay.ai.openai_api_key' => 'test-key']);
+it('AiDriver returns null on API failure', function () {
+    config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.driver' => 'openai']);
 
     Http::fake([
         'api.openai.com/*' => Http::response([], 500),
     ]);
 
-    $result = app(AiPromptService::class)->callOpenAI('test prompt');
+    $result = app(AiDriverInterface::class)->complete('test prompt');
 
     expect($result)->toBeNull();
 });
@@ -1065,7 +1069,7 @@ it('NotificationService handles null duration_ms in slack', function () {
 it('MCP RPC trigger_replay returns error for trace without payload', function () {
     $trace = Trace::factory()->create();
 
-    $response = $this->postJson('/api/trace-replay/mcp', [
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'trigger_replay',
         'params' => ['trace_id' => $trace->id],
         'id' => 10,
@@ -1075,4 +1079,134 @@ it('MCP RPC trigger_replay returns error for trace without payload', function ()
     $response->assertJsonPath('jsonrpc', '2.0');
     // Should have an error because no request payload
     $response->assertJsonStructure(['error' => ['code', 'message']]);
+});
+
+// ── Log call tracking ────────────────────────────────────────────────────────
+
+it('step records log_calls when a log message is emitted inside the step', function () {
+    TraceReplay::start('Log Tracking');
+
+    TraceReplay::step('Logging Step', function () {
+        Log::info('Something happened', ['key' => 'value']);
+    });
+
+    $step = TraceReplay::getCurrentTrace()->steps()->first();
+
+    // log_calls must be an array and contain at least one entry
+    expect($step->log_calls)->toBeArray()
+        ->and($step->log_calls)->toHaveCount(1)
+        ->and($step->log_calls[0]['level'])->toBe('info')
+        ->and($step->log_calls[0]['message'])->toBe('Something happened');
+});
+
+it('step stores null for log_calls when no log messages are emitted', function () {
+    TraceReplay::start('No Log Tracking');
+
+    TraceReplay::step('Silent Step', fn () => 'no logs');
+
+    $step = TraceReplay::getCurrentTrace()->steps()->first();
+
+    expect($step->log_calls)->toBeNull();
+});
+
+// ── NotificationService error_reason serialisation ───────────────────────────
+
+it('NotificationService serialises array error_reason correctly in mail body', function () {
+    Mail::shouldReceive('raw')
+        ->once()
+        ->withArgs(function (string $body) {
+            // The body must contain the error message text, NOT the raw PHP word "Array"
+            return str_contains($body, 'Something went wrong')
+                && ! str_contains($body, "\nArray\n");
+        });
+
+    config([
+        'trace-replay.notifications.channels' => ['mail'],
+        'trace-replay.notifications.mail.to' => 'ops@example.com',
+    ]);
+
+    $trace = Trace::factory()->create(['status' => 'error', 'name' => 'Array Error Trace']);
+    TraceStep::create([
+        'trace_id' => $trace->id,
+        'label' => 'Broken Step',
+        'status' => 'error',
+        'error_reason' => ['message' => 'Something went wrong', 'file' => '/app/foo.php', 'line' => 42, 'trace' => ''],
+        'step_order' => 1,
+        'duration_ms' => 10,
+    ]);
+
+    app(NotificationService::class)->notifyFailure($trace->load('steps'));
+});
+
+// ── TraceReplayFake — new methods & assertions ───────────────────────────────
+
+it('TraceReplayFake setWorkspaceId, setProjectId, setTraceParent are callable without error', function () {
+    $fake = TraceReplay::fake();
+
+    // These must not throw — they are no-ops in the fake
+    $fake->setWorkspaceId('ws-1');
+    $fake->setProjectId('proj-1');
+    $fake->setTraceParent('00-abc-01');
+    $fake->captureResponseOnLastStep(['body' => 'ok'], 200);
+    $fake->recordEvent(new stdClass);
+
+    expect(true)->toBeTrue(); // Reached without exception
+});
+
+it('TraceReplayFake getCurrentTrace returns null', function () {
+    $fake = TraceReplay::fake();
+    $fake->start('Some Trace');
+
+    expect($fake->getCurrentTrace())->toBeNull();
+});
+
+it('TraceReplayFake assertCheckpointRecorded passes when checkpoint exists', function () {
+    $fake = TraceReplay::fake();
+    $fake->start('Checkpoint Trace');
+    $fake->checkpoint('Inventory Checked');
+    $fake->end();
+
+    $fake->assertCheckpointRecorded('Inventory Checked');
+});
+
+it('TraceReplayFake assertCheckpointRecorded fails when checkpoint is missing', function () {
+    $fake = TraceReplay::fake();
+    $fake->start('No Checkpoint Trace');
+    $fake->end();
+
+    expect(fn () => $fake->assertCheckpointRecorded('Missing Checkpoint'))
+        ->toThrow(AssertionFailedError::class);
+});
+
+it('TraceReplayFake assertNoTraceStarted passes when no trace started', function () {
+    $fake = TraceReplay::fake();
+
+    $fake->assertNoTraceStarted();
+});
+
+it('TraceReplayFake assertNoTraceStarted fails when a trace was started', function () {
+    $fake = TraceReplay::fake();
+    $fake->start('Something');
+
+    expect(fn () => $fake->assertNoTraceStarted())
+        ->toThrow(AssertionFailedError::class);
+});
+
+it('TraceReplayFake assertTraceCount passes with correct count', function () {
+    $fake = TraceReplay::fake();
+    $fake->start('T1');
+    $fake->end();
+    $fake->start('T2');
+    $fake->end();
+
+    $fake->assertTraceCount(2);
+});
+
+it('TraceReplayFake assertTraceCount fails with wrong count', function () {
+    $fake = TraceReplay::fake();
+    $fake->start('T1');
+    $fake->end();
+
+    expect(fn () => $fake->assertTraceCount(3))
+        ->toThrow(AssertionFailedError::class);
 });

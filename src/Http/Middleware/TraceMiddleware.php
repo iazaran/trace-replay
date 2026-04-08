@@ -16,19 +16,18 @@ class TraceMiddleware
             return $next($request);
         }
 
-        // Respect sampling rate
-        $sampleRate = (float) config('trace-replay.sample_rate', 1.0);
-        if ($sampleRate < 1.0 && mt_rand() / mt_getrandmax() > $sampleRate) {
-            return $next($request);
-        }
-
-        // Skip trace-replay dashboard routes to avoid recursive tracing
-        if (str_starts_with($request->path(), 'trace-replay') || str_starts_with($request->path(), 'api/trace-replay')) {
+        // Recommendation 27: Skip trace-replay dashboard routes reliably by name
+        if ($request->route() && str_starts_with($request->route()->getName() ?? '', 'trace-replay.')) {
             return $next($request);
         }
 
         $masker = app(PayloadMasker::class);
         $reqBody = $masker->mask($request->all());
+
+        // W3C Trace Context propagation (Recommendation 17)
+        if ($traceParent = $request->header('traceparent')) {
+            TraceReplay::setTraceParent($traceParent);
+        }
 
         // Request::path() returns '/' for the root URI, or 'foo/bar' (no leading slash) for others.
         $path = $request->path();
@@ -73,12 +72,18 @@ class TraceMiddleware
             'headers' => $masker->mask($response->headers->all()),
         ];
 
-        // Try to decode JSON body; fall back to truncated text
+        // Try to decode JSON body; fall back to truncated text (Recommendation 28)
+        $maxSize = (int) config('trace-replay.max_payload_size', 65536);
         $content = $response->getContent();
+
+        if (strlen($content) > $maxSize) {
+            $content = substr($content, 0, $maxSize)."\n\n[TraceReplay: Payload truncated for size]";
+        }
+
         $decoded = json_decode($content, true);
-        $responsePayload['body'] = json_last_error() === JSON_ERROR_NONE
-            ? $masker->mask($decoded ?? [])
-            : substr($content, 0, 2000);
+        $responsePayload['body'] = (json_last_error() === JSON_ERROR_NONE && is_array($decoded))
+            ? $masker->mask($decoded)
+            : $content;
 
         TraceReplay::captureResponseOnLastStep($responsePayload, $httpStatus);
         TraceReplay::end($status);

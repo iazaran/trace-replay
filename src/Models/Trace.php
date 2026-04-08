@@ -23,7 +23,9 @@ class Trace extends Model
         'project_id',
         'name',
         'tags',
+        'trace_parent',
         'duration_ms',
+        'peak_memory_usage',
         'status',
         'http_status',
         'user_id',
@@ -38,7 +40,7 @@ class Trace extends Model
         'tags' => 'array',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
-        'duration_ms' => 'float',
+        'duration_ms' => 'decimal:2',
         'http_status' => 'integer',
     ];
 

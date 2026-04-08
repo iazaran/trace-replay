@@ -38,13 +38,19 @@
         }
     </script>
 
-    <!-- Alpine.js -->
+    <!-- Page-specific scripts that must register before Alpine -->
+    @yield('scripts')
+
+    <!-- Alpine.js - defer ensures it runs after inline scripts -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     
     <!-- Feather Icons -->
     <script src="https://unpkg.com/feather-icons"></script>
 
     <style>
+        /* Hide elements with x-cloak until Alpine initializes */
+        [x-cloak] { display: none !important; }
+
         body {
             background-color: #0f1117;
             color: #c9d1d9;

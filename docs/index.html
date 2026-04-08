@@ -133,6 +133,7 @@
                         <ul class="space-y-3 border-l border-zinc-800 ml-1 pl-4 mt-2">
                             <li><a href="#manual-tracing" class="block text-zinc-400 hover:text-white transition">Manual Tracing</a></li>
                             <li><a href="#api-reference" class="block text-zinc-400 hover:text-white transition">API Reference</a></li>
+                            <li><a href="#testing-helper" class="block text-zinc-400 hover:text-white transition">Testing Helper</a></li>
                             <li><a href="#http-ingestion" class="block text-zinc-400 hover:text-white transition">HTTP Ingestion</a></li>
                             <li><a href="#auto-tracing" class="block text-zinc-400 hover:text-white transition">Auto Tracing</a></li>
                             <li><a href="#dashboard" class="block text-zinc-400 hover:text-white transition">The Dashboard</a></li>
@@ -198,12 +199,14 @@ php artisan vendor:publish --tag=trace-replay-migrations</code></pre>
         'slack'       => ['webhook_url' => env('TRACE_REPLAY_SLACK_WEBHOOK')],
     ],
     'ai' => [
-        'openai_api_key' => env('TRACE_REPLAY_OPENAI_KEY'),
-        'model'          => env('TRACE_REPLAY_OPENAI_MODEL', 'gpt-4o'),
+        'driver'  => env('TRACE_REPLAY_AI_DRIVER', 'openai'), // openai | anthropic | ollama
+        'api_key' => env('TRACE_REPLAY_AI_KEY'),
+        'model'   => env('TRACE_REPLAY_AI_MODEL', 'gpt-4o'),
     ],
     'auto_trace' => [
         'jobs'     => env('TRACE_REPLAY_AUTO_TRACE_JOBS', true),
         'commands' => env('TRACE_REPLAY_AUTO_TRACE_COMMANDS', false),
+        'livewire' => env('TRACE_REPLAY_AUTO_TRACE_LIVEWIRE', true),
         'exclude_commands' => ['queue:work', 'queue:listen', 'horizon', 'schedule:run',
                                'schedule:work', 'trace-replay:prune', 'trace-replay:export'],
     ],
@@ -245,12 +248,43 @@ class BookingService
                 <thead><tr><th>Method</th><th>Description</th></tr></thead>
                 <tbody>
                     <tr><td><code>TraceReplay::start(name, tags[])</code></td><td>Start a new trace; returns <code>Trace</code> or <code>null</code></td></tr>
-                    <tr><td><code>TraceReplay::step(label, callable, extra[])</code></td><td>Wrap callable — records timing, memory, DB queries, errors</td></tr>
+                    <tr><td><code>TraceReplay::step(label, callable, extra[])</code></td><td>Wrap callable — records timing, memory, DB queries, cache, HTTP, mail, logs &amp; errors</td></tr>
                     <tr><td><code>TraceReplay::measure(label, callable)</code></td><td>Alias for <code>step()</code> — semantic clarity for benchmarks</td></tr>
                     <tr><td><code>TraceReplay::checkpoint(label, state[])</code></td><td>Zero-overhead breadcrumb (no callable)</td></tr>
                     <tr><td><code>TraceReplay::context(array)</code></td><td>Merge data into the next step's <code>state_snapshot</code></td></tr>
                     <tr><td><code>TraceReplay::end(status)</code></td><td>Finalise trace; status: <code>'success'</code> or <code>'error'</code></td></tr>
                     <tr><td><code>TraceReplay::getCurrentTrace()</code></td><td>Returns the active <code>Trace</code> model or <code>null</code></td></tr>
+                    <tr><td><code>TraceReplay::setWorkspaceId(id)</code></td><td>Scope subsequent traces to a workspace</td></tr>
+                    <tr><td><code>TraceReplay::setProjectId(id)</code></td><td>Scope subsequent traces to a project</td></tr>
+                </tbody>
+            </table>
+
+            <h2 id="testing-helper">Testing Helper</h2>
+            <p>Use <code>TraceReplay::fake()</code> in tests to assert on your instrumentation without hitting the database. The fake captures all <code>start()</code>, <code>step()</code>, <code>checkpoint()</code>, and <code>end()</code> calls in memory.</p>
+            <pre><code class="language-php">use TraceReplay\Facades\TraceReplay;
+
+public function test_booking_records_steps()
+{
+    $fake = TraceReplay::fake();
+
+    $this->post('/book', ['flight_id' => 123]);
+
+    $fake->assertTraceStarted('Flight Booking');
+    $fake->assertStepRecorded('Validate Inventory');
+    $fake->assertCheckpointRecorded('Inventory validated');
+    $fake->assertTraceEnded('success');
+    $fake->assertTraceCount(1);
+}</code></pre>
+            <table>
+                <thead><tr><th>Assertion</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr><td><code>assertTraceStarted(name)</code></td><td>Assert a trace with the given name was started</td></tr>
+                    <tr><td><code>assertNoTraceStarted()</code></td><td>Assert no trace was started at all</td></tr>
+                    <tr><td><code>assertTraceCount(n)</code></td><td>Assert exactly <code>n</code> traces were started</td></tr>
+                    <tr><td><code>assertStepRecorded(label)</code></td><td>Assert a step with the given label was recorded</td></tr>
+                    <tr><td><code>assertCheckpointRecorded(label)</code></td><td>Assert a checkpoint with the given label was recorded</td></tr>
+                    <tr><td><code>assertStepCount(n, traceName?)</code></td><td>Assert exactly <code>n</code> steps in total (or in a named trace)</td></tr>
+                    <tr><td><code>assertTraceEnded(status)</code></td><td>Assert a trace with the given final status exists</td></tr>
                 </tbody>
             </table>
 
@@ -267,11 +301,14 @@ class BookingService
     $middleware->append(\TraceReplay\Http\Middleware\TraceMiddleware::class);
 })</code></pre>
 
-            <h2 id="auto-tracing">Auto Tracing — Jobs &amp; Commands</h2>
+            <h2 id="auto-tracing">Auto Tracing — Jobs, Commands & Livewire</h2>
             <p>Queue jobs are automatically traced when <code>auto_trace.jobs</code> is enabled (default: <code>true</code>). No manual listener registration needed — the service provider wires everything up.</p>
             <p>Artisan commands can be auto-traced by enabling <code>auto_trace.commands</code>:</p>
             <pre><code class="language-bash">TRACE_REPLAY_AUTO_TRACE_COMMANDS=true</code></pre>
             <p>Internal commands like <code>queue:work</code>, <code>horizon</code>, and <code>trace-replay:prune</code> are excluded by default (see <code>auto_trace.exclude_commands</code>).</p>
+            
+            <h3>Livewire Component Tracing</h3>
+            <p>By enabling <code>auto_trace.livewire</code>, TraceReplay hooks into Livewire v2/v3's global events to automatically record distinct checkpoints on the timeline whenever your Livewire components go through <b>hydration</b> or <b>dehydration</b> cycles. This brings immense visibility into how heavily your components are performing over the wire.</p>
 
             <h2 id="dashboard">The Dashboard</h2>
             <p>Navigate to <code>https://your-app.com/trace-replay</code>.</p>
@@ -315,7 +352,7 @@ Gate::define('view-trace-replay', fn ($user) =>
                 <li>Request/response payloads (sensitive fields masked)</li>
                 <li>Step-by-step state snapshots</li>
             </ul>
-            <p>Configure <code>OPENAI_API_KEY</code> and click <strong>"Ask AI"</strong> to get an answer directly in the dashboard.</p>
+            <p>Three AI drivers are supported out of the box: <strong>OpenAI</strong> (default), <strong>Anthropic Claude</strong>, and <strong>Ollama</strong> (local models). Configure via <code>TRACE_REPLAY_AI_DRIVER</code> and <code>TRACE_REPLAY_AI_KEY</code>, then click <strong>"Ask AI"</strong> to get an answer directly in the dashboard.</p>
 
             <h2 id="mcp-api">MCP / AI-Agent JSON-RPC API</h2>
             <p>Autonomous agents can query TraceReplay over JSON-RPC 2.0 at <code>POST /api/trace-replay/mcp</code>.</p>
@@ -349,7 +386,7 @@ php artisan trace-replay:export --status=error --format=json  # all error traces
 
             <h2 id="testing">Testing</h2>
             <pre><code class="language-bash">./vendor/bin/pest</code></pre>
-            <p>The test suite (90 tests, 183 assertions) covers the full engine lifecycle, model scopes &amp; accessors, payload masking, AI prompt &amp; notification services, dashboard UI, MCP JSON-RPC API, middleware (trace &amp; auth), replay engine, Artisan commands (prune &amp; export with validation), and Blade components — all using an in-memory SQLite database.</p>
+            <p>The test suite (101 tests, 200 assertions) covers the full engine lifecycle, model scopes &amp; accessors, payload masking (PII, case-insensitive), AI prompt &amp; notification services, dashboard UI, MCP JSON-RPC API, middleware (trace &amp; auth), replay engine, log call tracking, <code>TraceReplayFake</code> assertions, Artisan commands (prune &amp; export with validation), and Blade components — all using an in-memory SQLite database.</p>
 
             <hr class="my-12 border-zinc-800">
             <p class="text-sm text-center text-zinc-500">TraceReplay &copy; 2026 &mdash; MIT License</p>

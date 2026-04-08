@@ -2,17 +2,32 @@
 
 namespace TraceReplay;
 
+use Illuminate\Cache\Events\CacheHit;
+use Illuminate\Cache\Events\CacheMissed;
+use Illuminate\Cache\Events\KeyForgotten;
+use Illuminate\Cache\Events\KeyWritten;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Http\Client\Events\RequestSending;
+use Illuminate\Http\Client\Events\ResponseReceived;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 use TraceReplay\Console\Commands\ExportTraceCommand;
 use TraceReplay\Console\Commands\PruneTracesCommand;
+use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Listeners\CommandTraceListener;
 use TraceReplay\Listeners\JobTraceListener;
+use TraceReplay\Services\Ai\AiDriverInterface;
+use TraceReplay\Services\Ai\Drivers\AnthropicDriver;
+use TraceReplay\Services\Ai\Drivers\OllamaDriver;
+use TraceReplay\Services\Ai\Drivers\OpenAiDriver;
 use TraceReplay\Services\AiPromptService;
 use TraceReplay\Services\NotificationService;
 use TraceReplay\Services\PayloadMasker;
@@ -25,9 +40,18 @@ class TraceReplayServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/trace-replay.php', 'trace-replay');
 
-        $this->app->singleton('trace-replay', fn ($app) => new TraceReplayManager($app));
+        $this->app->scoped('trace-replay', fn ($app) => new TraceReplayManager($app));
 
         $this->app->singleton(PayloadMasker::class);
+        $this->app->singleton(AiDriverInterface::class, function ($app) {
+            $driver = config('trace-replay.ai.driver', 'openai');
+
+            return match ($driver) {
+                'anthropic' => new AnthropicDriver,
+                'ollama' => new OllamaDriver,
+                default => new OpenAiDriver,
+            };
+        });
         $this->app->singleton(AiPromptService::class);
         $this->app->singleton(NotificationService::class);
         $this->app->singleton(ReplayService::class, fn ($app) => new ReplayService(
@@ -77,5 +101,36 @@ class TraceReplayServiceProvider extends ServiceProvider
             Event::listen(CommandStarting::class, fn (CommandStarting $e) => $this->app->make(CommandTraceListener::class)->onCommandStarting($e));
             Event::listen(CommandFinished::class, fn (CommandFinished $e) => $this->app->make(CommandTraceListener::class)->onCommandFinished($e));
         }
+
+        // Auto-trace Livewire components
+        if (config('trace-replay.auto_trace.livewire', true) && class_exists(Livewire::class)) {
+            try {
+                Livewire::listen('component.hydrate', function ($component, $request) {
+                    TraceReplay::checkpoint('Livewire Hydrate: '.get_class($component));
+                });
+                Livewire::listen('component.dehydrate', function ($component, $response) {
+                    TraceReplay::checkpoint('Livewire Dehydrate: '.get_class($component));
+                });
+            } catch (\Throwable $e) {
+                // Ignore if hook registration fails for specific versions
+            }
+        }
+
+        // Register global collectors for active traces
+        Event::listen([
+            CacheHit::class,
+            CacheMissed::class,
+            KeyForgotten::class,
+            KeyWritten::class,
+            RequestSending::class,
+            ResponseReceived::class,
+            MessageSending::class,
+            NotificationSending::class,
+            MessageLogged::class,
+        ], function ($event) {
+            if ($this->app->bound('trace-replay')) {
+                $this->app->make('trace-replay')->recordEvent($event);
+            }
+        });
     }
 }

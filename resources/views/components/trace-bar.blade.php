@@ -14,7 +14,7 @@
 
     <!-- Step count -->
     <span style="color:#8b949e;">
-        <strong style="color:#c9d1d9;">{{ $trace->steps()->count() }}</strong> steps
+        <strong style="color:#c9d1d9;">{{ $trace->steps->count() }}</strong> steps
     </span>
 
     <!-- Duration -->

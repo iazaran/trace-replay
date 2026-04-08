@@ -13,6 +13,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Max Capture Size (Bytes)
+    |--------------------------------------------------------------------------
+    | Prevent DB bloat by truncating payloads larger than this limit.
+    | Default: 64 KB.
+    */
+    'max_payload_size' => env('TRACE_REPLAY_MAX_PAYLOAD_SIZE', 65536),
+
+    /*
+    |--------------------------------------------------------------------------
     | Sampling Rate
     |--------------------------------------------------------------------------
     | A float between 0.0 and 1.0 controlling what fraction of HTTP requests
@@ -29,6 +38,19 @@ return [
     | in a custom TraceReplayManager binding for dynamic multi-tenancy.
     */
     'project_id' => env('TRACE_REPLAY_PROJECT_ID', null),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Batch Step Persistence
+    |--------------------------------------------------------------------------
+    | When true (default), all trace steps are buffered in memory and written
+    | to the database in a single INSERT at the end of the request/job, which
+    | is far more efficient than one INSERT per step.
+    | Set to false to persist each step immediately (useful for long-running
+    | processes where you want partial traces to survive a crash).
+    | Ignored when queue.enabled is true.
+    */
+    'batch_persistence' => env('TRACE_REPLAY_BATCH_PERSISTENCE', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -80,6 +102,8 @@ return [
     'replay' => [
         'default_base_url' => env('TRACE_REPLAY_REPLAY_URL', env('APP_URL', 'http://localhost')),
         'timeout' => env('TRACE_REPLAY_REPLAY_TIMEOUT', 30),
+        // Recommendation 12: Safety gate for non-GET methods
+        'allow_mutating_methods' => env('TRACE_REPLAY_REPLAY_MUTATING', false),
     ],
 
     /*
@@ -99,8 +123,11 @@ return [
     | Protect the Trace-Replay dashboard. For production use, add 'auth' or a
     | custom gate middleware, e.g. ['web', 'auth', 'can:view-trace-replay'].
     */
-    'middleware' => ['web'],
-    'api_middleware' => ['api'],
+    'middleware' => ['web', 'auth'],
+    'api' => [
+        'token' => env('TRACE_REPLAY_API_TOKEN'),
+        'middleware' => ['api'],
+    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -139,8 +166,10 @@ return [
     | receive a copyable prompt instead (no external call is made).
     */
     'ai' => [
-        'openai_api_key' => env('TRACE_REPLAY_OPENAI_KEY', null),
-        'model' => env('TRACE_REPLAY_OPENAI_MODEL', 'gpt-4o'),
+        'driver' => env('TRACE_REPLAY_AI_DRIVER', 'openai'), // openai, anthropic, ollama
+        'api_key' => env('TRACE_REPLAY_AI_KEY', env('TRACE_REPLAY_OPENAI_KEY')),
+        'model' => env('TRACE_REPLAY_AI_MODEL', 'gpt-4o'),
+        'base_url' => env('TRACE_REPLAY_AI_BASE_URL'), // For Ollama or custom endpoints
     ],
 
     /*
@@ -153,6 +182,7 @@ return [
     'auto_trace' => [
         'jobs' => env('TRACE_REPLAY_AUTO_TRACE_JOBS', true),
         'commands' => env('TRACE_REPLAY_AUTO_TRACE_COMMANDS', false),
+        'livewire' => env('TRACE_REPLAY_AUTO_TRACE_LIVEWIRE', true),
         // Artisan commands to exclude from auto-tracing (exact names)
         'exclude_commands' => [
             'queue:work', 'queue:listen', 'horizon', 'schedule:run',

@@ -49,6 +49,10 @@ class NotificationService
         $errorStep = $trace->error_step;
         $dashboardUrl = rtrim(config('app.url', ''), '/').'/trace-replay/traces/'.$trace->id;
 
+        $errorText = is_array($errorStep?->error_reason)
+            ? ($errorStep->error_reason['message'] ?? json_encode($errorStep->error_reason))
+            : ($errorStep?->error_reason ?? 'Unknown');
+
         $payload = [
             'text' => ':red_circle: *TraceReplay — Trace Failed*',
             'attachments' => [
@@ -59,7 +63,7 @@ class NotificationService
                         ['title' => 'Status',   'value' => 'Failed',                   'short' => true],
                         ['title' => 'Duration', 'value' => ($trace->duration_ms ?? 0).' ms', 'short' => true],
                         ['title' => 'Failed At', 'value' => $errorStep?->label ?? 'N/A', 'short' => true],
-                        ['title' => 'Error',    'value' => substr($errorStep?->error_reason ?? 'Unknown', 0, 300)],
+                        ['title' => 'Error',    'value' => substr($errorText, 0, 300)],
                         ['title' => 'Dashboard', 'value' => $dashboardUrl],
                     ],
                     'footer' => 'TraceReplay | '.config('app.name'),
@@ -82,7 +86,9 @@ class NotificationService
             'Failed At: '.($errorStep?->label ?? 'Unknown'),
             '',
             'Error:',
-            $errorStep?->error_reason ?? 'No error details captured.',
+            is_array($errorStep?->error_reason)
+                ? ($errorStep->error_reason['message'] ?? json_encode($errorStep->error_reason, JSON_PRETTY_PRINT))
+                : ($errorStep?->error_reason ?? 'No error details captured.'),
             '',
             'View in Dashboard:',
             $dashboardUrl,

@@ -3,11 +3,18 @@
 namespace TraceReplay\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use TraceReplay\Database\Factories\TraceStepFactory;
 
 class TraceStep extends Model
 {
-    use HasUuids;
+    use HasFactory, HasUuids;
+
+    protected static function newFactory(): TraceStepFactory
+    {
+        return TraceStepFactory::new();
+    }
 
     protected $table = 'tr_trace_steps';
 
@@ -23,6 +30,13 @@ class TraceStep extends Model
         'memory_usage',
         'db_query_count',
         'db_query_time_ms',
+        'db_queries',
+        'cache_calls',
+        'cache_hit_count',
+        'cache_miss_count',
+        'http_calls',
+        'mail_calls',
+        'log_calls',
         'status',
         'error_reason',
     ];
@@ -31,10 +45,18 @@ class TraceStep extends Model
         'request_payload' => 'array',
         'response_payload' => 'array',
         'state_snapshot' => 'array',
-        'duration_ms' => 'float',
-        'db_query_time_ms' => 'float',
+        'duration_ms' => 'decimal:2',
+        'db_query_time_ms' => 'decimal:2',
         'memory_usage' => 'integer',
         'db_query_count' => 'integer',
+        'db_queries' => 'array',
+        'cache_calls' => 'array',
+        'cache_hit_count' => 'integer',
+        'cache_miss_count' => 'integer',
+        'http_calls' => 'array',
+        'mail_calls' => 'array',
+        'log_calls' => 'array',
+        'error_reason' => 'array',
     ];
 
     public function trace()

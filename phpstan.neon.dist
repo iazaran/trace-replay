@@ -1,0 +1,13 @@
+parameters:
+    level: 5
+    paths:
+        - src
+        - config
+        - database
+    tmpDir: build/phpstan
+    checkMissingIterableValueType: false
+    ignoreErrors:
+        - '#Unsafe usage of new static\(\)#'
+        - '#Function config_path not found#'
+        - '#Function resource_path not found#'
+        - '#Function database_path not found#'

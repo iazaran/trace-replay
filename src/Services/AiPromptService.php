@@ -2,11 +2,18 @@
 
 namespace TraceReplay\Services;
 
-use Illuminate\Support\Facades\Http;
 use TraceReplay\Models\Trace;
+use TraceReplay\Services\Ai\AiDriverInterface;
 
 class AiPromptService
 {
+    protected AiDriverInterface $driver;
+
+    public function __construct(AiDriverInterface $driver)
+    {
+        $this->driver = $driver;
+    }
+
     /**
      * Build a rich, structured debugging prompt from a failed trace.
      */
@@ -62,7 +69,8 @@ class AiPromptService
 
             if ($step->id === $errorStep->id) {
                 $prompt .= "\n### 🚨 Failure Point\n\n";
-                $prompt .= "```json\n".($step->error_reason ?? 'No error details.')."\n```\n\n";
+                $errorStr = is_array($step->error_reason) ? json_encode($step->error_reason, JSON_PRETTY_PRINT) : ($step->error_reason ?? 'No error details.');
+                $prompt .= "```json\n{$errorStr}\n```\n\n";
             }
         }
 
@@ -77,31 +85,10 @@ class AiPromptService
     }
 
     /**
-     * Optionally call the OpenAI API directly and return the AI response.
-     * Returns null if no API key is configured (caller should fall back to prompt copy).
+     * Call the configured AI driver.
      */
-    public function callOpenAI(string $prompt): ?string
+    public function callAi(string $prompt): ?string
     {
-        $apiKey = config('trace-replay.ai.openai_api_key');
-        $model = config('trace-replay.ai.model', 'gpt-4o');
-
-        if (! $apiKey) {
-            return null;
-        }
-
-        $response = Http::withToken($apiKey)
-            ->timeout(60)
-            ->post('https://api.openai.com/v1/chat/completions', [
-                'model' => $model,
-                'messages' => [
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-            ]);
-
-        if ($response->successful()) {
-            return $response->json('choices.0.message.content');
-        }
-
-        return null;
+        return $this->driver->complete($prompt);
     }
 }

@@ -32,6 +32,11 @@ class TestCase extends Orchestra
         ]);
 
         $app['config']->set('trace-replay.enabled', true);
+        $app['config']->set('trace-replay.batch_persistence', false);
+        $app['config']->set('trace-replay.middleware', ['web']);
+        // API tests error because they don't send auth headers, so we set a token and authenticate in tests
+        $app['config']->set('trace-replay.api.token', 'test-token');
+        $app['config']->set('trace-replay.api.middleware', ['api']);
         $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
     }
 }

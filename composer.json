@@ -1,6 +1,6 @@
 {
     "name": "iazaran/trace-replay",
-    "description": "A high-fidelity process tracking, replay, and AI debugging package for Laravel.",
+    "description": "Enterprise-ready process tracking, replay, and AI-assisted debugging for Laravel applications.",
     "type": "library",
     "license": "MIT",
     "authors": [
@@ -11,12 +11,14 @@
     ],
     "keywords": [
         "laravel",
-        "trace",
+        "tracing",
+        "observability",
         "replay",
-        "debug",
+        "debugging",
         "ai",
         "monitoring",
-        "observability"
+        "distributed-tracing",
+        "laravel-package"
     ],
     "homepage": "https://iazaran.github.io/trace-replay/",
     "require": {
