@@ -9,8 +9,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $connection = Schema::getConnection();
+        $canChangeColumns = method_exists($connection, 'isDoctrineAvailable') && $connection->isDoctrineAvailable();
+
         // tr_traces enhancements
-        Schema::table('tr_traces', function (Blueprint $table) {
+        Schema::table('tr_traces', function (Blueprint $table) use ($canChangeColumns) {
             // Recommendation 17: Trace parent for W3C context
             if (! Schema::hasColumn('tr_traces', 'trace_parent')) {
                 $table->string('trace_parent')->after('tags')->nullable()->index();
@@ -31,11 +34,13 @@ return new class extends Migration
             }
 
             // Recommendation 29: Change precision of float to decimal
-            $table->decimal('duration_ms', 12, 2)->nullable()->change();
+            if ($canChangeColumns) {
+                $table->decimal('duration_ms', 12, 2)->nullable()->change();
+            }
         });
 
         // tr_trace_steps enhancements
-        Schema::table('tr_trace_steps', function (Blueprint $table) {
+        Schema::table('tr_trace_steps', function (Blueprint $table) use ($canChangeColumns) {
             // Recommendation 13: Detailed SQL tracking
             if (! Schema::hasColumn('tr_trace_steps', 'db_queries')) {
                 $table->json('db_queries')->after('db_query_time_ms')->nullable();
@@ -64,8 +69,10 @@ return new class extends Migration
             }
 
             // Recommendation 29: Change precision of float to decimal
-            $table->decimal('duration_ms', 12, 2)->nullable()->change();
-            $table->decimal('db_query_time_ms', 12, 2)->nullable()->change();
+            if ($canChangeColumns) {
+                $table->decimal('duration_ms', 12, 2)->nullable()->change();
+                $table->decimal('db_query_time_ms', 12, 2)->nullable()->change();
+            }
         });
     }
 
