@@ -26,9 +26,14 @@ class DashboardController extends Controller
             $query->where('type', $type);
         }
 
-        // Date range filter
+        // Date range filter (default to 'today' for performance)
         $dateRange = $request->query('date_range');
-        if ($dateRange) {
+        // Default to 'today' if no date_range is specified (better performance)
+        if ($dateRange === null) {
+            $dateRange = 'today';
+        }
+        // Apply date filter (skip for 'all' which means no filter)
+        if ($dateRange !== 'all') {
             $query->where(function ($q) use ($dateRange) {
                 match ($dateRange) {
                     'today' => $q->whereDate('started_at', now()->toDateString()),

@@ -134,7 +134,7 @@
                             <li><a href="#manual-tracing" class="block text-zinc-400 hover:text-white transition">Manual Tracing</a></li>
                             <li><a href="#api-reference" class="block text-zinc-400 hover:text-white transition">API Reference</a></li>
                             <li><a href="#testing-helper" class="block text-zinc-400 hover:text-white transition">Testing Helper</a></li>
-                            <li><a href="#http-ingestion" class="block text-zinc-400 hover:text-white transition">HTTP Ingestion</a></li>
+
                             <li><a href="#auto-tracing" class="block text-zinc-400 hover:text-white transition">Auto Tracing</a></li>
                             <li><a href="#dashboard" class="block text-zinc-400 hover:text-white transition">The Dashboard</a></li>
                             <li><a href="#security" class="block text-zinc-400 hover:text-white transition">Security</a></li>
@@ -169,6 +169,20 @@
             <p>TraceReplay ships with a polished, dark-themed dashboard featuring a waterfall timeline, syntax-highlighted JSON inspector, and live stats — all styled and ready to use out of the box. Publishing the views lets you customise the layout, colours, or add your own branding:</p>
             <pre><code class="language-bash">php artisan vendor:publish --tag=trace-replay-views</code></pre>
             <p>This copies the Blade templates to <code>resources/views/vendor/trace-replay/</code> where you can edit them freely. The package will automatically use your published versions instead of its built-in views.</p>
+
+            <h3>Recommended: Enable HTTP Middleware</h3>
+            <p>To automatically trace all HTTP requests, add the TraceMiddleware to your application. This provides instant visibility into every request without manual instrumentation.</p>
+            <p>For Laravel 10 (<code>app/Http/Kernel.php</code>):</p>
+            <pre><code class="language-php">protected $middlewareGroups = [
+    'web' => [
+        // ...
+        \TraceReplay\Http\Middleware\TraceMiddleware::class,
+    ],
+];</code></pre>
+            <p>For Laravel 11+ (<code>bootstrap/app.php</code>):</p>
+            <pre><code class="language-php">->withMiddleware(function (Middleware $middleware) {
+    $middleware->append(\TraceReplay\Http\Middleware\TraceMiddleware::class);
+})</code></pre>
 
             <h2 id="configuration">Configuration</h2>
             <p>Key options in <code>config/trace-replay.php</code>:</p>
@@ -287,19 +301,6 @@ public function test_booking_records_steps()
                     <tr><td><code>assertTraceEnded(status)</code></td><td>Assert a trace with the given final status exists</td></tr>
                 </tbody>
             </table>
-
-            <h2 id="http-ingestion">HTTP Auto Ingestion</h2>
-            <p>Automatically trace every HTTP request. Add to <code>app/Http/Kernel.php</code>:</p>
-            <pre><code class="language-php">protected $middlewareGroups = [
-    'web' => [
-        // ...
-        \TraceReplay\Http\Middleware\TraceMiddleware::class,
-    ],
-];</code></pre>
-            <p>For Laravel 11+ (<code>bootstrap/app.php</code>):</p>
-            <pre><code class="language-php">->withMiddleware(function (Middleware $middleware) {
-    $middleware->append(\TraceReplay\Http\Middleware\TraceMiddleware::class);
-})</code></pre>
 
             <h2 id="auto-tracing">Auto Tracing — Jobs, Commands & Livewire</h2>
             <p>Queue jobs are automatically traced when <code>auto_trace.jobs</code> is enabled (default: <code>true</code>). No manual listener registration needed — the service provider wires everything up.</p>

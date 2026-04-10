@@ -71,6 +71,29 @@ php artisan vendor:publish --tag=trace-replay-views
 
 This copies the Blade templates to `resources/views/vendor/trace-replay/` where you can customize the layout, colors, or add your own branding.
 
+#### Recommended: Enable HTTP Middleware
+
+To automatically trace all HTTP requests, add the TraceMiddleware to your application. This provides instant visibility into every request without manual instrumentation.
+
+For Laravel 10 (`app/Http/Kernel.php`):
+
+```php
+protected $middlewareGroups = [
+    'web' => [
+        // ...
+        \TraceReplay\Http\Middleware\TraceMiddleware::class,
+    ],
+];
+```
+
+For Laravel 11+ (`bootstrap/app.php`):
+
+```php
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->append(\TraceReplay\Http\Middleware\TraceMiddleware::class);
+})
+```
+
 ---
 
 ## ⚙️ Configuration
@@ -200,29 +223,6 @@ public function test_booking_records_steps()
 | `assertCheckpointRecorded(label)` | Assert a checkpoint with the given label was recorded |
 | `assertStepCount(n, traceName?)` | Assert exactly `n` steps in total (or in a named trace) |
 | `assertTraceEnded(status)` | Assert a trace with the given final status exists |
-
----
-
-### Auto HTTP Ingestion (Middleware)
-
-Automatically trace every HTTP request. Add to `app/Http/Kernel.php`:
-
-```php
-protected $middlewareGroups = [
-    'web' => [
-        // ...
-        \TraceReplay\Http\Middleware\TraceMiddleware::class,
-    ],
-];
-```
-
-For Laravel 11+ (using `bootstrap/app.php`):
-
-```php
-->withMiddleware(function (Middleware $middleware) {
-    $middleware->append(\TraceReplay\Http\Middleware\TraceMiddleware::class);
-})
-```
 
 ---
 
