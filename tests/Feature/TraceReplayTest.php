@@ -1,8 +1,10 @@
 <?php
 
+use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\AssertionFailedError;
 use TraceReplay\Facades\TraceReplay;
@@ -14,6 +16,7 @@ use TraceReplay\Services\Ai\AiDriverInterface;
 use TraceReplay\Services\AiPromptService;
 use TraceReplay\Services\NotificationService;
 use TraceReplay\Services\PayloadMasker;
+use TraceReplay\Services\ReplayService;
 use TraceReplay\TraceReplayManager;
 use TraceReplay\View\Components\TraceBar;
 
@@ -351,6 +354,16 @@ it('dashboard index search works', function () {
     $response->assertSee('Login Flow');
 });
 
+it('dashboard index filters by date_range', function () {
+    Trace::factory()->create(['name' => 'Today Trace', 'started_at' => now()]);
+    Trace::factory()->create(['name' => 'Old Trace', 'started_at' => now()->subDays(10)]);
+
+    $response = $this->get('/trace-replay?date_range=today');
+
+    $response->assertOk();
+    $response->assertSee('Today Trace');
+});
+
 it('dashboard show page loads for a valid trace', function () {
     $trace = Trace::factory()->create(['name' => 'Detail Test']);
 
@@ -512,6 +525,14 @@ it('TraceMiddleware respects disabled config', function () {
     $this->get('/trace-replay');
 
     expect(Trace::count())->toBe(0);
+});
+
+it('TraceMiddleware skips instrumentation when header requests it', function () {
+    Route::middleware('web')->get('/skip-test', fn () => 'ok');
+
+    $this->get('/skip-test', ['X-TraceReplay-Skip' => '1'])->assertOk();
+
+    expect(Trace::where('name', 'like', 'HTTP GET /skip-test%')->count())->toBe(0);
 });
 
 // ── Auth Middleware ──────────────────────────────────────────────────────────
@@ -886,6 +907,45 @@ it('dashboard index ignores invalid status filter', function () {
 });
 
 // ── Dashboard — replay endpoint ────────────────────────────────────────────
+
+it('ReplayService uses recorded host metadata when no base URL configured', function () {
+    Http::fake(function (HttpRequest $request) use (&$captured) {
+        $captured = $request;
+
+        return Http::response(['ok' => true], 200);
+    });
+
+    config(['trace-replay.replay.default_base_url' => null]);
+
+    $trace = Trace::factory()->create();
+    TraceStep::factory()->create([
+        'trace_id' => $trace->id,
+        'label' => 'HTTP Request',
+        'request_payload' => [
+            'method' => 'GET',
+            'uri' => '/api/demo',
+            'host' => 'http://example.test',
+            'full_url' => 'http://example.test/api/demo?foo=1',
+            'headers' => [
+                'accept' => ['application/json'],
+                'content-type' => ['application/json'],
+            ],
+            'body' => [],
+            'query' => ['foo' => 1],
+        ],
+        'response_payload' => [
+            'status' => 200,
+            'body' => ['ok' => true],
+        ],
+    ]);
+
+    $result = app(ReplayService::class)->replay($trace);
+
+    expect($captured->url())->toBe('http://example.test/api/demo?foo=1')
+        ->and($captured->header('X-TraceReplay-Skip'))->toBe(['1'])
+        ->and($captured->header('X-TraceReplay-Origin-Trace'))->toBe([$trace->id])
+        ->and($result['replay']['status'])->toBe(200);
+});
 
 it('dashboard replay endpoint returns error for trace without request payload', function () {
     $trace = Trace::factory()->create();
