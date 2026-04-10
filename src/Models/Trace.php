@@ -39,8 +39,11 @@ class Trace extends Model
     ];
 
     public const TYPE_HTTP = 'http';
+
     public const TYPE_JOB = 'job';
+
     public const TYPE_COMMAND = 'command';
+
     public const TYPE_SCHEDULE = 'schedule';
 
     protected $casts = [

@@ -5,7 +5,6 @@ namespace TraceReplay\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\DB;
 use TraceReplay\Models\Trace;
 use TraceReplay\Models\TraceStep;
 use TraceReplay\Services\AiPromptService;
@@ -69,7 +68,7 @@ class DashboardController extends Controller
         ")->first();
 
         // By type
-        $byType = Trace::selectRaw("type, COUNT(*) as count")
+        $byType = Trace::selectRaw('type, COUNT(*) as count')
             ->whereDate('started_at', '>=', now()->subDays(7))
             ->groupBy('type')
             ->pluck('count', 'type')

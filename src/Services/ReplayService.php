@@ -29,7 +29,7 @@ class ReplayService
         $baseUrl = $this->determineBaseUrl($payload, $overrideUrl);
 
         if (! $baseUrl) {
-            throw new \Exception("Cannot determine target host for replay. Set TRACE_REPLAY_REPLAY_URL or pass an override_url.");
+            throw new \Exception('Cannot determine target host for replay. Set TRACE_REPLAY_REPLAY_URL or pass an override_url.');
         }
 
         unset($headers['host'], $headers['Host'], $headers['cookie'], $headers['Cookie']);
