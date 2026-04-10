@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    public function up()
+    public function up(): void
     {
         Schema::create('tr_workspaces', function (Blueprint $table) {
             $table->uuid('id')->primary();
@@ -27,10 +27,14 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->uuid('project_id')->nullable()->index();
             $table->string('name')->nullable();
+            $table->string('type', 20)->default('http'); // http, job, command, livewire
             $table->json('tags')->nullable();
-            $table->float('duration_ms')->nullable();
+            $table->string('trace_parent')->nullable()->index(); // W3C trace context
+            $table->decimal('duration_ms', 12, 2)->nullable();
+            $table->unsignedBigInteger('peak_memory_usage')->nullable();
             $table->string('status')->default('processing'); // processing, success, error
             $table->unsignedSmallInteger('http_status')->nullable();
+            $table->text('error_reason')->nullable();
             $table->string('user_id')->nullable()->index();
             $table->string('user_type')->nullable();
             $table->string('ip_address', 45)->nullable();
@@ -40,6 +44,9 @@ return new class extends Migration
             $table->timestamps();
 
             $table->foreign('project_id')->references('id')->on('tr_projects')->onDelete('set null');
+            $table->index('status');
+            $table->index('started_at');
+            $table->index(['type', 'started_at']);
         });
 
         Schema::create('tr_trace_steps', function (Blueprint $table) {
@@ -53,10 +60,17 @@ return new class extends Migration
             $table->json('response_payload')->nullable();
             $table->json('state_snapshot')->nullable();
 
-            $table->float('duration_ms')->nullable();
+            $table->decimal('duration_ms', 12, 2)->nullable();
             $table->unsignedBigInteger('memory_usage')->nullable(); // bytes
             $table->unsignedInteger('db_query_count')->nullable();
-            $table->float('db_query_time_ms')->nullable();
+            $table->decimal('db_query_time_ms', 12, 2)->nullable();
+            $table->json('db_queries')->nullable(); // Detailed SQL tracking
+            $table->json('cache_calls')->nullable();
+            $table->unsignedInteger('cache_hit_count')->default(0);
+            $table->unsignedInteger('cache_miss_count')->default(0);
+            $table->json('http_calls')->nullable();
+            $table->json('mail_calls')->nullable();
+            $table->json('log_calls')->nullable();
             $table->string('status')->default('success'); // success, error, checkpoint
             $table->text('error_reason')->nullable();
 
@@ -66,7 +80,7 @@ return new class extends Migration
         });
     }
 
-    public function down()
+    public function down(): void
     {
         Schema::dropIfExists('tr_trace_steps');
         Schema::dropIfExists('tr_traces');
