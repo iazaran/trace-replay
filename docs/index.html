@@ -159,11 +159,11 @@
 
             <h2 id="installation">Installation</h2>
             <pre><code class="language-bash">composer require iazaran/trace-replay</code></pre>
-            <p>Publish config and migrations:</p>
-            <pre><code class="language-bash">php artisan vendor:publish --tag=trace-replay-config
-php artisan vendor:publish --tag=trace-replay-migrations</code></pre>
+            <p>Publish the config:</p>
+            <pre><code class="language-bash">php artisan vendor:publish --tag=trace-replay-config</code></pre>
+            <p>Run migrations:</p>
             <pre><code class="language-bash">php artisan migrate</code></pre>
-            <p>Migrations use <code>json</code> columns for full MySQL, MariaDB, PostgreSQL, and SQLite compatibility.</p>
+            <p>Migrations run automatically without publishing. They use <code>json</code> columns for full MySQL, MariaDB, PostgreSQL, and SQLite compatibility.</p>
 
             <h3>Publishing Views</h3>
             <p>TraceReplay ships with a polished, dark-themed dashboard featuring a waterfall timeline, syntax-highlighted JSON inspector, and live stats — all styled and ready to use out of the box. Publishing the views lets you customise the layout, colours, or add your own branding:</p>

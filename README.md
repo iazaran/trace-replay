@@ -47,11 +47,10 @@ TraceReplay is not a standard error logger. It is a full-fledged **execution tra
 composer require iazaran/trace-replay
 ```
 
-Publish the config and migrations:
+Publish the config:
 
 ```bash
 php artisan vendor:publish --tag=trace-replay-config
-php artisan vendor:publish --tag=trace-replay-migrations
 ```
 
 Run migrations:
@@ -60,7 +59,7 @@ Run migrations:
 php artisan migrate
 ```
 
-> **Note:** Migrations use `json` columns and support `decimal` precision for timings, compatible with MySQL 5.7+, MariaDB, PostgreSQL, and SQLite.
+> **Note:** Migrations run automatically without publishing. They use `json` columns and `decimal` precision for timings, compatible with MySQL 5.7+, MariaDB, PostgreSQL, and SQLite.
 
 #### Publishing Views
 
