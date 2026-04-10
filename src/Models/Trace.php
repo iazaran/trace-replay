@@ -22,12 +22,14 @@ class Trace extends Model
     protected $fillable = [
         'project_id',
         'name',
+        'type',
         'tags',
         'trace_parent',
         'duration_ms',
         'peak_memory_usage',
         'status',
         'http_status',
+        'error_reason',
         'user_id',
         'user_type',
         'ip_address',
@@ -36,12 +38,21 @@ class Trace extends Model
         'completed_at',
     ];
 
+    public const TYPE_HTTP = 'http';
+
+    public const TYPE_JOB = 'job';
+
+    public const TYPE_COMMAND = 'command';
+
+    public const TYPE_SCHEDULE = 'schedule';
+
     protected $casts = [
         'tags' => 'array',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
         'duration_ms' => 'decimal:2',
         'http_status' => 'integer',
+        'error_reason' => 'array',
     ];
 
     public function project()

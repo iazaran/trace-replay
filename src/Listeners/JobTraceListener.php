@@ -17,7 +17,7 @@ class JobTraceListener
             'queue' => $event->job->getQueue(),
             'connection' => $event->connectionName,
             'job_id' => $event->job->getJobId(),
-        ]);
+        ], 'job');
 
         TraceReplay::checkpoint('Job Started', [
             'payload' => $event->job->payload(),

@@ -8,6 +8,7 @@ use Illuminate\Cache\Events\KeyForgotten;
 use Illuminate\Cache\Events\KeyWritten;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\Client\Events\RequestSending;
 use Illuminate\Http\Client\Events\ResponseReceived;
 use Illuminate\Log\Events\MessageLogged;
@@ -132,5 +133,39 @@ class TraceReplayServiceProvider extends ServiceProvider
                 $this->app->make('trace-replay')->recordEvent($event);
             }
         });
+
+        // Hook into Laravel's exception handler to capture exceptions for active traces
+        $this->registerExceptionCapture();
+    }
+
+    /**
+     * Register a reportable callback to capture exceptions in active traces.
+     */
+    protected function registerExceptionCapture(): void
+    {
+        if (! $this->app->bound(ExceptionHandler::class)) {
+            return;
+        }
+
+        try {
+            $handler = $this->app->make(ExceptionHandler::class);
+
+            // Laravel 8+ uses reportable() method
+            if (method_exists($handler, 'reportable')) {
+                $handler->reportable(function (\Throwable $e) {
+                    if ($this->app->bound('trace-replay')) {
+                        $manager = $this->app->make('trace-replay');
+                        if ($manager->getCurrentTrace()) {
+                            $manager->captureException($e);
+                        }
+                    }
+
+                    // Return false to allow other reporters to run
+                    return false;
+                });
+            }
+        } catch (\Throwable $e) {
+            // Silently fail if exception handler is not compatible
+        }
     }
 }

@@ -20,8 +20,10 @@ class AiPromptService
     public function generateFixPrompt(Trace $trace): string
     {
         $errorStep = $trace->error_step;
+        $hasHttpError = $trace->http_status && $trace->http_status >= 400;
 
-        if (! $errorStep) {
+        // If no error step but the trace has an HTTP error status, we still generate a debug prompt
+        if (! $errorStep && ! $hasHttpError) {
             return 'This trace completed successfully with no errors recorded. Nothing to debug.';
         }
 
@@ -35,7 +37,12 @@ class AiPromptService
         $prompt .= "- **Trace Name:** {$trace->name}\n";
         $prompt .= '- **Total Duration:** '.number_format($trace->duration_ms ?? 0, 2)." ms\n";
         $prompt .= "- **Step Count:** {$steps->count()}\n";
-        $prompt .= "- **Failed At:** Step #{$errorStep->step_order} — `{$errorStep->label}`\n";
+
+        if ($errorStep) {
+            $prompt .= "- **Failed At:** Step #{$errorStep->step_order} — `{$errorStep->label}`\n";
+        } elseif ($hasHttpError) {
+            $prompt .= "- **HTTP Error:** {$trace->http_status}\n";
+        }
 
         if ($trace->user_id) {
             $prompt .= "- **User ID:** {$trace->user_id}\n";
@@ -44,6 +51,24 @@ class AiPromptService
             $prompt .= "- **IP Address:** {$trace->ip_address}\n";
         }
         $prompt .= "\n";
+
+        // Add HTTP error context if applicable
+        if ($hasHttpError) {
+            $prompt .= "## HTTP Error\n\n";
+            $prompt .= "The request returned HTTP status **{$trace->http_status}**";
+            if ($trace->http_status === 404) {
+                $prompt .= ' (Not Found)';
+            } elseif ($trace->http_status === 500) {
+                $prompt .= ' (Internal Server Error)';
+            } elseif ($trace->http_status === 403) {
+                $prompt .= ' (Forbidden)';
+            } elseif ($trace->http_status === 401) {
+                $prompt .= ' (Unauthorized)';
+            } elseif ($trace->http_status === 422) {
+                $prompt .= ' (Unprocessable Entity)';
+            }
+            $prompt .= ".\n\n";
+        }
 
         $prompt .= "## Execution Timeline\n\n";
         foreach ($steps as $step) {
@@ -67,7 +92,7 @@ class AiPromptService
                 $prompt .= '   - **State:** `'.substr(json_encode($step->state_snapshot), 0, 500)."`\n";
             }
 
-            if ($step->id === $errorStep->id) {
+            if ($errorStep && $step->id === $errorStep->id) {
                 $prompt .= "\n### 🚨 Failure Point\n\n";
                 $errorStr = is_array($step->error_reason) ? json_encode($step->error_reason, JSON_PRETTY_PRINT) : ($step->error_reason ?? 'No error details.');
                 $prompt .= "```json\n{$errorStr}\n```\n\n";
@@ -75,7 +100,11 @@ class AiPromptService
         }
 
         $prompt .= "## Your Task\n\n";
-        $prompt .= "1. **Root Cause:** Analyse the timeline and identify why Step #{$errorStep->step_order} (`{$errorStep->label}`) failed.\n";
+        if ($errorStep) {
+            $prompt .= "1. **Root Cause:** Analyse the timeline and identify why Step #{$errorStep->step_order} (`{$errorStep->label}`) failed.\n";
+        } else {
+            $prompt .= "1. **Root Cause:** Analyse the timeline and identify why this request returned HTTP {$trace->http_status}.\n";
+        }
         $prompt .= "2. **Hypothesis:** State your best hypothesis about the underlying issue.\n";
         $prompt .= "3. **Fix:** Provide a concrete, minimal code fix (PHP/Laravel) or configuration change.\n";
         $prompt .= "4. **Prevention:** Suggest how to prevent this class of error in the future (tests, validation, guards).\n\n";
