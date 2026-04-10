@@ -5,6 +5,7 @@ namespace TraceReplay\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Throwable;
 use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Services\PayloadMasker;
 
@@ -17,7 +18,7 @@ class TraceMiddleware
         }
 
         // Recommendation 27: Skip trace-replay dashboard routes reliably by name
-        if ($request->route() && str_starts_with($request->route()->getName() ?? '', 'trace-replay.')) {
+        if ($this->shouldSkipInstrumentation($request)) {
             return $next($request);
         }
 
@@ -32,7 +33,7 @@ class TraceMiddleware
         // Request::path() returns '/' for the root URI, or 'foo/bar' (no leading slash) for others.
         $path = $request->path();
         $uri = $path === '/' ? '/' : '/'.$path;
-        $trace = TraceReplay::start('HTTP '.strtoupper($request->method()).' '.$uri);
+        $trace = TraceReplay::start('HTTP '.strtoupper($request->method()).' '.$uri, [], 'http');
 
         if (! $trace) {
             return $next($request);
@@ -42,22 +43,30 @@ class TraceMiddleware
         $requestPayload = [
             'method' => $request->method(),
             'uri' => $uri,
+            'full_url' => $request->fullUrl(),
+            'host' => $request->getSchemeAndHttpHost(),
             'headers' => $masker->mask($request->headers->all()),
             'body' => $reqBody,
             'query' => $masker->mask($request->query->all()),
         ];
 
-        /** @var SymfonyResponse $response */
-        $response = TraceReplay::step('HTTP Request', fn () => $next($request), [
-            'request_payload' => $requestPayload,
-        ]);
+        try {
+            /** @var SymfonyResponse $response */
+            $response = TraceReplay::step('HTTP Request', fn () => $next($request), [
+                'request_payload' => $requestPayload,
+            ]);
 
-        return $response;
+            return $response;
+        } catch (Throwable $e) {
+            // Capture exception at trace level for proper error reporting
+            TraceReplay::captureException($e);
+            throw $e;
+        }
     }
 
     public function terminate(Request $request, SymfonyResponse $response): void
     {
-        if (! config('trace-replay.enabled')) {
+        if (! config('trace-replay.enabled') || $this->shouldSkipInstrumentation($request)) {
             return;
         }
 
@@ -87,5 +96,30 @@ class TraceMiddleware
 
         TraceReplay::captureResponseOnLastStep($responsePayload, $httpStatus);
         TraceReplay::end($status);
+    }
+
+    protected function shouldSkipInstrumentation(Request $request): bool
+    {
+        if (! config('trace-replay.enabled')) {
+            return true;
+        }
+
+        if ($request->headers->has('X-TraceReplay-Skip')) {
+            return true;
+        }
+
+        $routeName = $request->route()?->getName();
+        if ($routeName && str_starts_with($routeName, 'trace-replay.')) {
+            return true;
+        }
+
+        $path = ltrim($request->path(), '/');
+        foreach (['trace-replay', 'api/trace-replay'] as $prefix) {
+            if (str_starts_with($path, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

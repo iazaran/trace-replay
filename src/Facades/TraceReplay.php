@@ -7,12 +7,13 @@ use TraceReplay\Testing\TraceReplayFake;
 use TraceReplay\TraceReplayManager;
 
 /**
- * @method static \TraceReplay\Models\Trace|null start(string $name, array $tags = [], bool $forceSample = false)
+ * @method static \TraceReplay\Models\Trace|null start(string $name, array $tags = [], string $type = 'http', bool $forceSample = false)
  * @method static mixed step(string $label, callable $callback, array $extra = [])
  * @method static mixed measure(string $label, callable $callback, array $extra = [])
  * @method static void checkpoint(string $label, array $state = [])
  * @method static \TraceReplay\TraceReplayManager context(array $data)
  * @method static void captureResponseOnLastStep(array $responsePayload, int $httpStatus = 200)
+ * @method static void captureException(\Throwable $exception)
  * @method static void end(string $status = 'success')
  * @method static \TraceReplay\Models\Trace|null getCurrentTrace()
  * @method static void setTraceParent(?string $traceParent)

@@ -17,7 +17,7 @@ class CommandTraceListener
         TraceReplay::start("Artisan: {$event->command}", [
             'command' => $event->command,
             'arguments' => (string) $event->input,
-        ]);
+        ], 'command');
 
         TraceReplay::checkpoint('Command Started');
     }

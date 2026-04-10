@@ -64,7 +64,7 @@ class TraceReplayManager
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
-    public function start(string $name, array $tags = [], bool $forceSample = false): ?Trace
+    public function start(string $name, array $tags = [], string $type = 'http', bool $forceSample = false): ?Trace
     {
         if (! config('trace-replay.enabled', true)) {
             return null;
@@ -80,6 +80,7 @@ class TraceReplayManager
                 $this->currentTrace->update(array_filter([
                     'name' => $name,
                     'tags' => ! empty($tags) ? $tags : null,
+                    'type' => $type,
                 ]));
             } catch (Throwable $e) {
                 $this->handleInternalError($e);
@@ -112,6 +113,7 @@ class TraceReplayManager
             $this->currentTrace = Trace::create([
                 'project_id' => $this->projectId ?? $this->determineProjectId(),
                 'name' => $name,
+                'type' => $type,
                 'tags' => $tags,
                 'status' => 'processing',
                 'user_id' => $user?->getAuthIdentifier(),
@@ -313,7 +315,44 @@ class TraceReplayManager
         }
     }
 
-    public function end(string $status = 'success'): void
+    /**
+     * Capture an exception at the trace level (called by middleware when exception is caught).
+     * Also immediately sets status to 'error' in case terminate() doesn't run.
+     */
+    public function captureException(Throwable $exception): void
+    {
+        if (! $this->currentTrace) {
+            return;
+        }
+
+        // Flush any buffered steps first so they're not lost
+        $this->flushStepBuffer();
+
+        try {
+            $durationMs = $this->startedAtMicrotime
+                ? round((microtime(true) - $this->startedAtMicrotime) * 1000, 2)
+                : null;
+
+            $this->currentTrace->update([
+                'status' => 'error',
+                'error_reason' => [
+                    'class' => \get_class($exception),
+                    'message' => $exception->getMessage(),
+                    'code' => $exception->getCode(),
+                    'file' => $exception->getFile(),
+                    'line' => $exception->getLine(),
+                    'trace' => collect(explode("\n", $exception->getTraceAsString()))->take(30)->values()->all(),
+                ],
+                'duration_ms' => $durationMs,
+                'completed_at' => now(),
+                'peak_memory_usage' => memory_get_peak_usage(true),
+            ]);
+        } catch (Throwable $e) {
+            $this->handleInternalError($e);
+        }
+    }
+
+    public function end(string $status = 'success', ?Throwable $exception = null): void
     {
         if (! $this->currentTrace) {
             return;
@@ -335,12 +374,26 @@ class TraceReplayManager
                 ? round((microtime(true) - $this->startedAtMicrotime) * 1000, 2)
                 : null;
 
-            $this->currentTrace->update([
+            $updateData = [
                 'status' => $status,
                 'completed_at' => now(),
                 'duration_ms' => $durationMs,
                 'peak_memory_usage' => memory_get_peak_usage(true),
-            ]);
+            ];
+
+            // Capture exception details at trace level
+            if ($exception) {
+                $updateData['error_reason'] = [
+                    'class' => get_class($exception),
+                    'message' => $exception->getMessage(),
+                    'code' => $exception->getCode(),
+                    'file' => $exception->getFile(),
+                    'line' => $exception->getLine(),
+                    'trace' => collect(explode("\n", $exception->getTraceAsString()))->take(30)->values()->all(),
+                ];
+            }
+
+            $this->currentTrace->update($updateData);
 
             // Fire notification if configured and trace failed
             if ($status === 'error' && config('trace-replay.notifications.on_failure', false)) {
