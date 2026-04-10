@@ -165,7 +165,7 @@ php artisan vendor:publish --tag=trace-replay-migrations</code></pre>
             <pre><code class="language-bash">php artisan migrate</code></pre>
             <p>Migrations use <code>json</code> columns for full MySQL, MariaDB, PostgreSQL, and SQLite compatibility.</p>
 
-            <h3>Publishing Views (Recommended)</h3>
+            <h3>Publishing Views</h3>
             <p>TraceReplay ships with a polished, dark-themed dashboard featuring a waterfall timeline, syntax-highlighted JSON inspector, and live stats — all styled and ready to use out of the box. Publishing the views lets you customise the layout, colours, or add your own branding:</p>
             <pre><code class="language-bash">php artisan vendor:publish --tag=trace-replay-views</code></pre>
             <p>This copies the Blade templates to <code>resources/views/vendor/trace-replay/</code> where you can edit them freely. The package will automatically use your published versions instead of its built-in views.</p>
@@ -352,7 +352,27 @@ Gate::define('view-trace-replay', fn ($user) =>
                 <li>Request/response payloads (sensitive fields masked)</li>
                 <li>Step-by-step state snapshots</li>
             </ul>
-            <p>Three AI drivers are supported out of the box: <strong>OpenAI</strong> (default), <strong>Anthropic Claude</strong>, and <strong>Ollama</strong> (local models). Configure via <code>TRACE_REPLAY_AI_DRIVER</code> and <code>TRACE_REPLAY_AI_KEY</code>, then click <strong>"Ask AI"</strong> to get an answer directly in the dashboard.</p>
+
+            <h3>No API Key Required</h3>
+            <p>The AI prompt feature works <strong>without any API key</strong>. Simply copy the generated prompt and paste it into ChatGPT, Claude, or any other AI assistant of your choice.</p>
+
+            <h3>Optional: Direct AI Integration</h3>
+            <p>For a seamless experience, configure an AI driver to get answers directly in the dashboard. Three drivers are supported:</p>
+            <pre><code class="language-bash"># OpenAI (default)
+TRACE_REPLAY_AI_DRIVER=openai
+TRACE_REPLAY_AI_KEY=sk-your-openai-key
+TRACE_REPLAY_AI_MODEL=gpt-4o
+
+# Or Anthropic Claude
+TRACE_REPLAY_AI_DRIVER=anthropic
+TRACE_REPLAY_AI_KEY=sk-ant-your-key
+TRACE_REPLAY_AI_MODEL=claude-3-5-sonnet-latest
+
+# Or Ollama (local, no API key needed)
+TRACE_REPLAY_AI_DRIVER=ollama
+TRACE_REPLAY_AI_MODEL=llama3
+TRACE_REPLAY_AI_BASE_URL=http://localhost:11434/api/generate</code></pre>
+            <p>With a key configured, clicking <strong>"Ask AI"</strong> sends the prompt to your chosen provider and displays the response directly in the dashboard.</p>
 
             <h2 id="mcp-api">MCP / AI-Agent JSON-RPC API</h2>
             <p>Autonomous agents can query TraceReplay over JSON-RPC 2.0 at <code>POST /api/trace-replay/mcp</code>.</p>
@@ -386,7 +406,7 @@ php artisan trace-replay:export --status=error --format=json  # all error traces
 
             <h2 id="testing">Testing</h2>
             <pre><code class="language-bash">./vendor/bin/pest</code></pre>
-            <p>The test suite (101 tests, 200 assertions) covers the full engine lifecycle, model scopes &amp; accessors, payload masking (PII, case-insensitive), AI prompt &amp; notification services, dashboard UI, MCP JSON-RPC API, middleware (trace &amp; auth), replay engine, log call tracking, <code>TraceReplayFake</code> assertions, Artisan commands (prune &amp; export with validation), and Blade components — all using an in-memory SQLite database.</p>
+            <p>The test suite (104 tests, 208 assertions) covers the full engine lifecycle, model scopes &amp; accessors, payload masking (PII, case-insensitive), AI prompt &amp; notification services, dashboard UI with date range filters, MCP JSON-RPC API, middleware (trace &amp; auth), replay engine, log call tracking, <code>TraceReplayFake</code> assertions, Artisan commands (prune &amp; export with validation), and Blade components — all using an in-memory SQLite database.</p>
 
             <hr class="my-12 border-zinc-800">
             <p class="text-sm text-center text-zinc-500">TraceReplay &copy; 2026 &mdash; MIT License</p>

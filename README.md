@@ -6,11 +6,11 @@
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
 [![Laravel](https://img.shields.io/badge/Laravel-10%20|%2011%20|%2012%20|%2013-red)](https://laravel.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/tests-104%20passing-brightgreen)](#testing)
 
 TraceReplay is not a standard error logger. It is a full-fledged **execution tracer** that captures every step of your complex workflows, reconstructs them with a waterfall timeline, and offers one-click AI debugging when things go wrong.
 
-![TraceReplay Dashboard](art/preview.png)
+![TraceReplay](art/preview.png)
 
 ---
 
@@ -62,11 +62,15 @@ php artisan migrate
 
 > **Note:** Migrations use `json` columns and support `decimal` precision for timings, compatible with MySQL 5.7+, MariaDB, PostgreSQL, and SQLite.
 
-#### Publishing Views (Optional)
+#### Publishing Views
+
+To customize the dashboard UI:
 
 ```bash
 php artisan vendor:publish --tag=trace-replay-views
 ```
+
+This copies the Blade templates to `resources/views/vendor/trace-replay/` where you can customize the layout, colors, or add your own branding.
 
 ---
 
@@ -260,13 +264,18 @@ Drop the `<x-trace-replay-trace-bar />` Blade component into your layout for ins
 
 Access the built-in dashboard at `https://your-app.com/trace-replay`.
 
+![Dashboard](art/dashboard.png)
+
 **Features:**
 - **Waterfall timeline** — visual bars show each step's exact duration relative to the total trace
 - **Live stats** — auto-refreshing counters (total traces, failed, avg duration)
 - **Search & filter** — filter by name, IP, user ID; toggle failed-only view
+- **Date range filter** — quickly filter traces by today, yesterday, last 7 days, or last 30 days
 - **Step inspector** — syntax-highlighted JSON for request payload, response payload, and state snapshot
 - **Replay engine** — re-execute any HTTP step and view a structural JSON diff
 - **AI Fix Prompt** — one-click prompt ready for Cursor, ChatGPT, or Claude
+
+![Trace Details](art/details.png)
 
 ### Securing the Dashboard
 
@@ -302,7 +311,32 @@ For any failed trace the dashboard shows an **AI Fix Prompt** button that genera
 - Request/response payloads (sensitive fields masked)
 - Step-by-step state snapshots
 
-Paste this into any LLM. Optionally configure your OpenAI key and click **"Ask AI"** to get an answer directly in the dashboard.
+### No API Key Required
+
+The AI prompt feature works **without any API key**. Copy the generated prompt and paste it into ChatGPT, Claude, or any other AI assistant.
+
+### Optional: Direct AI Integration
+
+For a seamless experience, configure an AI driver to get answers directly in the dashboard:
+
+```env
+# OpenAI (default)
+TRACE_REPLAY_AI_DRIVER=openai
+TRACE_REPLAY_AI_KEY=sk-your-openai-key
+TRACE_REPLAY_AI_MODEL=gpt-4o
+
+# Or Anthropic Claude
+TRACE_REPLAY_AI_DRIVER=anthropic
+TRACE_REPLAY_AI_KEY=sk-ant-your-key
+TRACE_REPLAY_AI_MODEL=claude-3-5-sonnet-latest
+
+# Or Ollama (local, no API key needed)
+TRACE_REPLAY_AI_DRIVER=ollama
+TRACE_REPLAY_AI_MODEL=llama3
+TRACE_REPLAY_AI_BASE_URL=http://localhost:11434/api/generate
+```
+
+With a key configured, clicking **"Ask AI"** sends the prompt to your chosen AI provider and displays the response in the dashboard.
 
 ---
 
@@ -371,7 +405,7 @@ composer install
 ./vendor/bin/pest
 ```
 
-101 tests, 200 assertions. The test suite covers:
+104 tests, 208 assertions. The test suite covers:
 - Trace lifecycle (start, step, checkpoint, context, end, duration precision)
 - Error capturing, step ordering, DB query tracking
 - Model scopes (`failed`, `successful`, `search`)
