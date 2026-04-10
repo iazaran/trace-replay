@@ -4,6 +4,7 @@ namespace TraceReplay\Services;
 
 use Illuminate\Support\Facades\Http;
 use TraceReplay\Models\Trace;
+use TraceReplay\Models\TraceStep;
 
 class ReplayService
 {
@@ -11,44 +12,44 @@ class ReplayService
 
     public function replay(Trace $trace, ?string $overrideUrl = null): array
     {
-        // Prefer the dedicated 'HTTP Request' step; fall back to the first step with a payload
-        $initialStep = $trace->steps()
-            ->where('label', 'HTTP Request')
-            ->whereNotNull('request_payload')
-            ->first()
-            ?? $trace->steps()->whereNotNull('request_payload')->first();
-
-        if (! $initialStep || empty($initialStep->request_payload)) {
-            throw new \Exception('Cannot replay trace: No request payload found on any step.');
-        }
+        $initialStep = $this->resolveInitialHttpStep($trace);
 
         $payload = $initialStep->request_payload;
         $method = strtoupper($payload['method'] ?? 'GET');
 
-        // Safety check for mutating methods (Recommendation 12)
         $mutatingMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
-        if (in_array($method, $mutatingMethods) && ! config('trace-replay.replay.allow_mutating_methods', false)) {
+        if (in_array($method, $mutatingMethods, true) && ! config('trace-replay.replay.allow_mutating_methods', false)) {
             throw new \Exception("Replaying mutating methods ({$method}) is disabled for safety. Enable 'replay.allow_mutating_methods' in config to override.");
         }
+
         $uri = $payload['uri'] ?? '/';
         $headers = $payload['headers'] ?? [];
         $body = $payload['body'] ?? [];
         $query = $payload['query'] ?? [];
+        $baseUrl = $this->determineBaseUrl($payload, $overrideUrl);
 
-        // Remove host headers so they don't interfere with the target
-        unset($headers['host'], $headers['Host']);
+        if (! $baseUrl) {
+            throw new \Exception("Cannot determine target host for replay. Set TRACE_REPLAY_REPLAY_URL or pass an override_url.");
+        }
 
-        $baseUrl = $overrideUrl ?? config('trace-replay.replay.default_base_url');
-        $targetUrl = rtrim($baseUrl, '/').'/'.ltrim($uri, '/');
+        unset($headers['host'], $headers['Host'], $headers['cookie'], $headers['Cookie']);
 
-        // Symfony normalises all header names to lowercase, so 'Content-Type' never exists
-        // in the stored headers array — only 'content-type' does.
+        $targetUrl = $this->buildTargetUrl($uri, $baseUrl, $query);
+
         $isJson = str_contains($headers['content-type'][0] ?? '', 'json');
 
-        $response = Http::withHeaders($headers)
+        $options = [];
+        if (! in_array($method, ['GET', 'HEAD', 'OPTIONS'], true) && ! empty($body)) {
+            $options = $isJson ? ['json' => $body] : ['form_params' => $body];
+        }
+
+        $normalizedHeaders = $this->normalizeHeaders($headers);
+        $normalizedHeaders['X-TraceReplay-Skip'] = '1';
+        $normalizedHeaders['X-TraceReplay-Origin-Trace'] = $trace->id;
+
+        $response = Http::withHeaders($normalizedHeaders)
             ->timeout((int) config('trace-replay.replay.timeout', 30))
-            ->withQueryParameters($query)
-            ->send($method, $targetUrl, $isJson ? ['json' => $body] : ['form_params' => $body]);
+            ->send($method, $targetUrl, $options);
 
         $replayBody = $response->json() ?? $response->body();
 
@@ -70,6 +71,75 @@ class ReplayService
                 ? $this->generateDiff($originalBody, $replayBody2)
                 : ['status' => $originalBody === $replayBody2 ? 'unchanged' : 'changed', 'original' => $originalBody, 'replay' => $replayBody2],
         ];
+    }
+
+    protected function resolveInitialHttpStep(Trace $trace): TraceStep
+    {
+        $initialStep = $trace->steps()
+            ->where('label', 'HTTP Request')
+            ->whereNotNull('request_payload')
+            ->first()
+            ?? $trace->steps()->whereNotNull('request_payload')->first();
+
+        if (! $initialStep || empty($initialStep->request_payload)) {
+            throw new \Exception('Cannot replay trace: No request payload found on any step.');
+        }
+
+        return $initialStep;
+    }
+
+    protected function determineBaseUrl(array $payload, ?string $overrideUrl): ?string
+    {
+        if ($overrideUrl) {
+            return $overrideUrl;
+        }
+
+        // First, try to use the host from the recorded payload (preserves original port)
+        if (! empty($payload['host'])) {
+            return $payload['host'];
+        }
+
+        // Fallback: extract from full_url if host wasn't recorded
+        if (! empty($payload['full_url'])) {
+            $parts = parse_url($payload['full_url']);
+            if ($parts && isset($parts['scheme'], $parts['host'])) {
+                $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+
+                return "{$parts['scheme']}://{$parts['host']}{$port}";
+            }
+        }
+
+        // Last resort: use configured default base URL
+        if ($configured = config('trace-replay.replay.default_base_url')) {
+            return $configured;
+        }
+
+        return null;
+    }
+
+    protected function buildTargetUrl(string $uri, string $baseUrl, array $query): string
+    {
+        $target = filter_var($uri, FILTER_VALIDATE_URL)
+            ? $uri
+            : rtrim($baseUrl, '/').'/'.ltrim($uri, '/');
+
+        if (! empty($query)) {
+            $separator = str_contains($target, '?') ? '&' : '?';
+            $target .= $separator.http_build_query($query);
+        }
+
+        return $target;
+    }
+
+    protected function normalizeHeaders(array $headers): array
+    {
+        $normalized = [];
+
+        foreach ($headers as $name => $value) {
+            $normalized[$name] = is_array($value) ? implode(', ', $value) : $value;
+        }
+
+        return $normalized;
     }
 
     protected function generateDiff(array $original, array $replay): array
