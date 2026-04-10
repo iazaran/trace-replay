@@ -263,14 +263,20 @@
             <input name="search" value="{{ request('search') }}" placeholder="Search..."
                    class="px-3 py-2 text-sm rounded-lg bg-dark-700 border border-gray-700 text-gray-300 placeholder-gray-500 focus:outline-none focus:border-brand-500 w-40">
 
+            @php
+                $dateRange = request('date_range');
+                $hasDateRange = request()->has('date_range');
+                // Default to 'today' when no parameter is present
+                $effectiveDateRange = $hasDateRange ? $dateRange : 'today';
+            @endphp
             <select name="date_range" onchange="this.form.submit()"
                     class="px-3 py-2 text-sm rounded-lg bg-dark-700 border border-gray-700 text-gray-300 focus:outline-none focus:border-brand-500">
-                <option value="" @selected(!request('date_range'))>All Time</option>
-                <option value="today" @selected(request('date_range')==='today')>📅 Today</option>
-                <option value="yesterday" @selected(request('date_range')==='yesterday')>📅 Yesterday</option>
-                <option value="7days" @selected(request('date_range')==='7days')>📅 Last 7 Days</option>
-                <option value="30days" @selected(request('date_range')==='30days')>📅 Last 30 Days</option>
-                <option value="hour" @selected(request('date_range')==='hour')>⏰ Last Hour</option>
+                <option value="hour" @selected($effectiveDateRange === 'hour')>⏰ Last Hour</option>
+                <option value="today" @selected($effectiveDateRange === 'today')>📅 Today</option>
+                <option value="yesterday" @selected($effectiveDateRange === 'yesterday')>📅 Yesterday</option>
+                <option value="7days" @selected($effectiveDateRange === '7days')>📅 Last 7 Days</option>
+                <option value="30days" @selected($effectiveDateRange === '30days')>📅 Last 30 Days</option>
+                <option value="all" @selected($effectiveDateRange === 'all')>📊 All Time</option>
             </select>
 
             <select name="type" onchange="this.form.submit()"
