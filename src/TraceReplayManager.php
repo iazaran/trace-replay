@@ -12,6 +12,7 @@ use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Throwable;
 use TraceReplay\Jobs\PersistTraceStepJob;
@@ -46,6 +47,8 @@ class TraceReplayManager
 
     /** @var string|null Incoming W3C traceparent header */
     protected ?string $traceParent = null;
+
+    protected ?bool $supportsWorkspaceColumn = null;
 
     /** @var array<int, array<string, mixed>> Stack of active step data frames */
     protected array $stepStack = [];
@@ -110,7 +113,7 @@ class TraceReplayManager
             $this->stepStack = [];
             $this->startedAtMicrotime = microtime(true);
 
-            $this->currentTrace = Trace::create([
+            $traceData = [
                 'project_id' => $this->projectId ?? $this->determineProjectId(),
                 'name' => $name,
                 'type' => $type,
@@ -122,7 +125,13 @@ class TraceReplayManager
                 'user_agent' => request()->userAgent(),
                 'trace_parent' => $this->traceParent,
                 'started_at' => now(),
-            ]);
+            ];
+
+            if ($this->workspaceId !== null && $this->supportsWorkspaceColumn()) {
+                $traceData['workspace_id'] = $this->workspaceId;
+            }
+
+            $this->currentTrace = Trace::create($traceData);
 
             return $this->currentTrace;
         } catch (Throwable $e) {
@@ -143,6 +152,8 @@ class TraceReplayManager
         $status = 'success';
         $errorReason = null;
         $trackDb = config('trace-replay.track_db_queries', true);
+        $connection = null;
+        $ownsQueryLog = false;
 
         // Use Laravel's built-in query log rather than DB::listen() to avoid
         // listener accumulation: each additional step() call would register
@@ -150,8 +161,15 @@ class TraceReplayManager
         // multiple times (once per registered listener).
         $dbQueriesBefore = 0;
         if ($trackDb) {
-            DB::enableQueryLog();
-            $dbQueriesBefore = count(DB::getQueryLog());
+            $connection = DB::connection();
+            $ownsQueryLog = ! $connection->logging();
+
+            if ($ownsQueryLog) {
+                $connection->flushQueryLog();
+                $connection->enableQueryLog();
+            }
+
+            $dbQueriesBefore = count($connection->getQueryLog());
         }
 
         // Push a new frame onto the stack to collect events for this step and its children
@@ -197,8 +215,8 @@ class TraceReplayManager
             $queryCount = 0;
             $queryTimeMs = 0.0;
             $queries = [];
-            if ($trackDb) {
-                $queries = array_slice(DB::getQueryLog(), (int) $frame['db_queries_before']);
+            if ($trackDb && $connection) {
+                $queries = array_slice($connection->getQueryLog(), (int) $frame['db_queries_before']);
                 $queryCount = \count($queries);
                 $queryTimeMs = round(array_sum(array_column($queries, 'time')), 2);
             }
@@ -236,6 +254,11 @@ class TraceReplayManager
             $step = new TraceStep($stepData);
             $this->lastStep = $step;
             $this->persistStep($step);
+
+            if ($trackDb && $connection && $ownsQueryLog) {
+                $connection->flushQueryLog();
+                $connection->disableQueryLog();
+            }
         }
     }
 
@@ -299,10 +322,10 @@ class TraceReplayManager
 
         try {
             // Update the last step in the buffer if batching is active
-            if (! config('trace-replay.queue.enabled') && ! empty($this->stepBuffer)) {
+            if (! empty($this->stepBuffer)) {
                 $lastIndex = count($this->stepBuffer) - 1;
                 $this->stepBuffer[$lastIndex]['response_payload'] = $responsePayload;
-            } elseif ($this->lastStep) {
+            } elseif ($this->lastStep?->exists) {
                 // Otherwise update the persisted/queued model
                 $this->lastStep->update([
                     'response_payload' => $responsePayload,
@@ -453,21 +476,42 @@ class TraceReplayManager
             } elseif ($event instanceof KeyWritten || $event instanceof KeyForgotten) {
                 $frame['cache_calls'][] = ['type' => $type, 'key' => $event->key, 'time' => microtime(true)];
             } elseif ($event instanceof HttpRequestSending) {
-                $frame['http_calls'][$event->request->url()] = [
+                $frame['http_calls'][] = [
                     'url' => $event->request->url(),
                     'method' => $event->request->method(),
                     'start' => microtime(true),
                 ];
             } elseif ($event instanceof HttpResponseReceived) {
-                if (isset($frame['http_calls'][$event->request->url()])) {
-                    $frame['http_calls'][$event->request->url()]['status'] = $event->response->status();
-                    $frame['http_calls'][$event->request->url()]['duration'] = round((microtime(true) - $frame['http_calls'][$event->request->url()]['start']) * 1000, 2);
+                for ($index = count($frame['http_calls']) - 1; $index >= 0; $index--) {
+                    if (
+                        ($frame['http_calls'][$index]['url'] ?? null) === $event->request->url()
+                        && ($frame['http_calls'][$index]['method'] ?? null) === $event->request->method()
+                        && ! array_key_exists('status', $frame['http_calls'][$index])
+                    ) {
+                        $frame['http_calls'][$index]['status'] = $event->response->status();
+                        $frame['http_calls'][$index]['duration'] = round((microtime(true) - $frame['http_calls'][$index]['start']) * 1000, 2);
+                        break;
+                    }
                 }
-            } elseif ($event instanceof MessageSending || $event instanceof NotificationSending) {
+            } elseif ($event instanceof MessageSending) {
                 $frame['mail_calls'][] = [
                     'type' => $type,
-                    'subject' => method_exists($event, 'message') ? $event->message?->getSubject() : null,
-                    'to' => method_exists($event, 'message') ? array_keys($event->message?->getTo() ?? []) : null,
+                    'subject' => $event->message->getSubject(),
+                    'to' => array_map(
+                        static fn ($address) => method_exists($address, 'getAddress') ? $address->getAddress() : (string) $address,
+                        $event->message->getTo() ?? []
+                    ),
+                    'time' => microtime(true),
+                ];
+            } elseif ($event instanceof NotificationSending) {
+                $frame['mail_calls'][] = [
+                    'type' => $type,
+                    'notification' => \get_class($event->notification),
+                    'channel' => $event->channel,
+                    'notifiable_type' => is_object($event->notifiable) ? \get_class($event->notifiable) : gettype($event->notifiable),
+                    'notifiable_id' => is_object($event->notifiable) && method_exists($event->notifiable, 'getKey')
+                        ? $event->notifiable->getKey()
+                        : null,
                     'time' => microtime(true),
                 ];
             } elseif ($event instanceof MessageLogged) {
@@ -509,19 +553,7 @@ class TraceReplayManager
             }
         }
 
-        if (config('trace-replay.queue.enabled')) {
-            try {
-                dispatch(new PersistTraceStepJob($stepData))
-                    ->onConnection(config('trace-replay.queue.connection'))
-                    ->onQueue(config('trace-replay.queue.queue'));
-            } catch (Throwable $e) {
-                $this->handleInternalError($e);
-            }
-
-            return;
-        }
-
-        if (! config('trace-replay.batch_persistence', true)) {
+        if (! config('trace-replay.queue.enabled') && ! config('trace-replay.batch_persistence', true)) {
             try {
                 $this->lastStep = TraceStep::create($stepData);
             } catch (Throwable $e) {
@@ -542,6 +574,18 @@ class TraceReplayManager
         }
 
         try {
+            if (config('trace-replay.queue.enabled')) {
+                foreach ($this->stepBuffer as $item) {
+                    dispatch(new PersistTraceStepJob($item))
+                        ->onConnection(config('trace-replay.queue.connection'))
+                        ->onQueue(config('trace-replay.queue.queue'));
+                }
+
+                $this->stepBuffer = [];
+
+                return;
+            }
+
             // Must manually json_encode array casts because insert() bypasses Eloquent casts.
             $jsonFields = ['request_payload', 'response_payload', 'state_snapshot', 'db_queries',
                 'cache_calls', 'http_calls', 'mail_calls', 'log_calls', 'error_reason'];
@@ -599,6 +643,19 @@ class TraceReplayManager
     protected function determineProjectId(): ?string
     {
         return config('trace-replay.project_id');
+    }
+
+    protected function supportsWorkspaceColumn(): bool
+    {
+        if ($this->supportsWorkspaceColumn !== null) {
+            return $this->supportsWorkspaceColumn;
+        }
+
+        try {
+            return $this->supportsWorkspaceColumn = Schema::hasColumn('tr_traces', 'workspace_id');
+        } catch (Throwable) {
+            return $this->supportsWorkspaceColumn = false;
+        }
     }
 
     /**

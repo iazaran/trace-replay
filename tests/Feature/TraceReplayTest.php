@@ -1,12 +1,20 @@
 <?php
 
+use GuzzleHttp\Psr7\Request as PsrRequest;
+use GuzzleHttp\Psr7\Response as PsrResponse;
+use Illuminate\Http\Client\Events\RequestSending;
+use Illuminate\Http\Client\Events\ResponseReceived;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Http\Client\Response as HttpClientResponse;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\AssertionFailedError;
+use Symfony\Component\Mime\Email;
 use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Models\Project;
 use TraceReplay\Models\Trace;
@@ -102,6 +110,27 @@ it('records error status when step throws an exception', function () {
 
     expect($step->status)->toBe('error')
         ->and($step->error_reason)->toContain('Intentional error');
+});
+
+it('queue persistence updates the buffered last step instead of creating a duplicate row', function () {
+    config([
+        'trace-replay.queue.enabled' => true,
+        'trace-replay.queue.connection' => 'sync',
+        'trace-replay.queue.queue' => 'default',
+    ]);
+
+    TraceReplay::start('Queued HTTP Trace');
+    TraceReplay::step('HTTP Request', fn () => null, [
+        'request_payload' => ['method' => 'GET', 'uri' => '/queued'],
+    ]);
+
+    TraceReplay::captureResponseOnLastStep(['status' => 200, 'body' => ['ok' => true]], 200);
+    TraceReplay::end('success');
+
+    $steps = TraceStep::all();
+
+    expect($steps)->toHaveCount(1)
+        ->and($steps->first()->response_payload)->toMatchArray(['status' => 200, 'body' => ['ok' => true]]);
 });
 
 it('measure() is an alias for step()', function () {
@@ -814,6 +843,22 @@ it('step records db query count when tracking is enabled', function () {
     expect($step->db_query_count)->toBeGreaterThanOrEqual(1);
 });
 
+it('step query tracking restores the query log state after the step finishes', function () {
+    config(['trace-replay.track_db_queries' => true]);
+
+    $connection = DB::connection();
+    $connection->disableQueryLog();
+    $connection->flushQueryLog();
+
+    TraceReplay::start('Query Log Cleanup');
+    TraceReplay::step('Tracked Query', function () {
+        Trace::count();
+    });
+
+    expect($connection->logging())->toBeFalse()
+        ->and($connection->getQueryLog())->toBe([]);
+});
+
 it('step does not track queries when disabled', function () {
     config(['trace-replay.track_db_queries' => false]);
 
@@ -1159,6 +1204,27 @@ it('step records log_calls when a log message is emitted inside the step', funct
         ->and($step->log_calls[0]['message'])->toBe('Something happened');
 });
 
+it('step records repeated HTTP calls to the same endpoint independently', function () {
+    TraceReplay::start('HTTP Tracking');
+
+    TraceReplay::step('Outgoing HTTP', function () {
+        $requestA = new HttpRequest(new PsrRequest('GET', 'https://example.test/users'));
+        $requestB = new HttpRequest(new PsrRequest('GET', 'https://example.test/users'));
+
+        app('trace-replay')->recordEvent(new RequestSending($requestA));
+        app('trace-replay')->recordEvent(new ResponseReceived($requestA, new HttpClientResponse(new PsrResponse(200))));
+
+        app('trace-replay')->recordEvent(new RequestSending($requestB));
+        app('trace-replay')->recordEvent(new ResponseReceived($requestB, new HttpClientResponse(new PsrResponse(201))));
+    });
+
+    $step = TraceReplay::getCurrentTrace()->steps()->first();
+
+    expect($step->http_calls)->toHaveCount(2)
+        ->and($step->http_calls[0]['status'])->toBe(200)
+        ->and($step->http_calls[1]['status'])->toBe(201);
+});
+
 it('step stores null for log_calls when no log messages are emitted', function () {
     TraceReplay::start('No Log Tracking');
 
@@ -1196,6 +1262,24 @@ it('NotificationService serialises array error_reason correctly in mail body', f
     ]);
 
     app(NotificationService::class)->notifyFailure($trace->load('steps'));
+});
+
+it('step records mail metadata from MessageSending events', function () {
+    TraceReplay::start('Mail Tracking');
+
+    TraceReplay::step('Send Mail', function () {
+        $message = (new Email)
+            ->to('ops@example.com')
+            ->subject('TraceReplay alert');
+
+        app('trace-replay')->recordEvent(new MessageSending($message));
+    });
+
+    $step = TraceReplay::getCurrentTrace()->steps()->first();
+
+    expect($step->mail_calls)->toHaveCount(1)
+        ->and($step->mail_calls[0]['subject'])->toBe('TraceReplay alert')
+        ->and($step->mail_calls[0]['to'])->toBe(['ops@example.com']);
 });
 
 // ── TraceReplayFake — new methods & assertions ───────────────────────────────
@@ -1269,4 +1353,35 @@ it('TraceReplayFake assertTraceCount fails with wrong count', function () {
 
     expect(fn () => $fake->assertTraceCount(3))
         ->toThrow(AssertionFailedError::class);
+});
+
+it('setWorkspaceId persists the workspace on new traces', function () {
+    $workspace = Workspace::create(['id' => Str::uuid(), 'name' => 'Scoped Workspace']);
+
+    TraceReplay::setWorkspaceId($workspace->id);
+
+    $trace = TraceReplay::start('Workspace Scoped Trace');
+    TraceReplay::end();
+
+    expect($trace->fresh()->workspace_id)->toBe($workspace->id)
+        ->and($trace->fresh()->workspace)->not->toBeNull()
+        ->and($trace->fresh()->workspace->name)->toBe('Scoped Workspace');
+});
+
+it('completion_percentage ignores checkpoints when locating the failed step', function () {
+    TraceReplay::start('Checkpoint Progress');
+    TraceReplay::checkpoint('Boot');
+    TraceReplay::step('Step 1', fn () => null);
+    TraceReplay::checkpoint('Midpoint');
+
+    try {
+        TraceReplay::step('Step 2', fn () => throw new Exception('fail'));
+    } catch (Exception) {
+    }
+
+    TraceReplay::end('error');
+
+    $trace = Trace::latest()->first();
+
+    expect($trace->completion_percentage)->toBe(50);
 });
