@@ -1,18 +1,18 @@
 <?php
 
-use Illuminate\Http\Client\Request as HttpRequest;
-use Illuminate\Http\Client\Response as HttpClientResponse;
+use GuzzleHttp\Psr7\Request as PsrRequest;
+use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Http\Client\Events\RequestSending;
 use Illuminate\Http\Client\Events\ResponseReceived;
+use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Http\Client\Response as HttpClientResponse;
 use Illuminate\Mail\Events\MessageSending;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
-use GuzzleHttp\Psr7\Request as PsrRequest;
-use GuzzleHttp\Psr7\Response as PsrResponse;
 use PHPUnit\Framework\AssertionFailedError;
 use Symfony\Component\Mime\Email;
 use TraceReplay\Facades\TraceReplay;
