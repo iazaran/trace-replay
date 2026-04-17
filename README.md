@@ -6,7 +6,7 @@
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
 [![Laravel](https://img.shields.io/badge/Laravel-10%20|%2011%20|%2012%20|%2013-red)](https://laravel.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-104%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/tests-110%20passing-brightgreen)](#testing)
 
 TraceReplay is not a standard error logger. It is a full-fledged **execution tracer** that captures every step of your complex workflows, reconstructs them with a waterfall timeline, and offers one-click AI debugging when things go wrong.
 
@@ -60,6 +60,8 @@ php artisan migrate
 ```
 
 > **Note:** Migrations run automatically without publishing. They use `json` columns and `decimal` precision for timings, compatible with MySQL 5.7+, MariaDB, PostgreSQL, and SQLite.
+>
+> ⚠️ **Important When Updating:** Package migrations do not execute automatically upon `composer update`. Whenever you update TraceReplay to a newer version, you must run `php artisan migrate` to ensure any newly introduced schema changes are applied.
 
 #### Publishing Views
 
@@ -404,14 +406,14 @@ composer install
 ./vendor/bin/pest
 ```
 
-104 tests, 208 assertions. The test suite covers:
+110 tests, 225 assertions. The test suite covers:
 - Trace lifecycle (start, step, checkpoint, context, end, duration precision)
 - Error capturing, step ordering, DB query tracking
 - Model scopes (`failed`, `successful`, `search`)
 - Model accessors (`error_step`, `total_db_queries`, `total_memory_usage`, `completion_percentage`)
 - `PayloadMasker` — recursive PII field redaction, case-insensitivity
 - `AiPromptService` — prompt generation, OpenAI integration (mocked), null-safety
-- `NotificationService` — mail and Slack dispatch, null-safety
+- Queue batch persistence, Livewire hydration testing, and mail execution tracking
 - `ReplayService` — HTTP replay and JSON diff
 - Dashboard — index, filters, search, show, stats, export, replay, AI prompt
 - MCP API — REST endpoints and JSON-RPC (all methods + error handling)

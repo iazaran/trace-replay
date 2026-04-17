@@ -164,6 +164,9 @@
             <p>Run migrations:</p>
             <pre><code class="language-bash">php artisan migrate</code></pre>
             <p>Migrations run automatically without publishing. They use <code>json</code> columns for full MySQL, MariaDB, PostgreSQL, and SQLite compatibility.</p>
+            <div class="bg-yellow-900/30 border border-yellow-500/30 rounded-lg p-4 mb-6 mt-4">
+                <p class="text-sm text-yellow-200 mt-0 mb-0"><strong>⚠️ Important When Updating:</strong> Package migrations do not execute automatically upon <code>composer update</code>. Whenever you update TraceReplay to a newer version, you must run <code>php artisan migrate</code> to apply any newly introduced schema changes.</p>
+            </div>
 
             <h3>Publishing Views</h3>
             <p>TraceReplay ships with a polished, dark-themed dashboard featuring a waterfall timeline, syntax-highlighted JSON inspector, and live stats — all styled and ready to use out of the box. Publishing the views lets you customise the layout, colours, or add your own branding:</p>
@@ -407,7 +410,7 @@ php artisan trace-replay:export --status=error --format=json  # all error traces
 
             <h2 id="testing">Testing</h2>
             <pre><code class="language-bash">./vendor/bin/pest</code></pre>
-            <p>The test suite (104 tests, 208 assertions) covers the full engine lifecycle, model scopes &amp; accessors, payload masking (PII, case-insensitive), AI prompt &amp; notification services, dashboard UI with date range filters, MCP JSON-RPC API, middleware (trace &amp; auth), replay engine, log call tracking, <code>TraceReplayFake</code> assertions, Artisan commands (prune &amp; export with validation), and Blade components — all using an in-memory SQLite database.</p>
+            <p>The test suite (110 tests, 225 assertions) covers the full engine lifecycle, model scopes &amp; accessors, payload masking (PII, case-insensitive), AI prompt &amp; notification services, dashboard UI with date range filters, MCP JSON-RPC API, middleware (trace &amp; auth), replay engine, log call tracking, <code>TraceReplayFake</code> assertions, Artisan commands (prune &amp; export with validation), queue persistence, and Blade components — all using an in-memory SQLite database.</p>
 
             <hr class="my-12 border-zinc-800">
             <p class="text-sm text-center text-zinc-500">TraceReplay &copy; 2026 &mdash; MIT License</p>
