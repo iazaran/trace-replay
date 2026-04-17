@@ -20,6 +20,7 @@ class Trace extends Model
     protected $table = 'tr_traces';
 
     protected $fillable = [
+        'workspace_id',
         'project_id',
         'name',
         'type',
@@ -60,6 +61,11 @@ class Trace extends Model
         return $this->belongsTo(Project::class, 'project_id');
     }
 
+    public function workspace()
+    {
+        return $this->belongsTo(Workspace::class, 'workspace_id');
+    }
+
     public function steps()
     {
         return $this->hasMany(TraceStep::class, 'trace_id')->orderBy('step_order');
@@ -94,14 +100,23 @@ class Trace extends Model
             return 100;
         }
 
-        $totalSteps = $this->steps()->where('type', '!=', 'checkpoint')->count();
+        $steps = $this->relationLoaded('steps')
+            ? $this->steps->sortBy('step_order')->values()
+            : $this->steps()->orderBy('step_order')->get();
+
+        $nonCheckpointSteps = $steps->where('type', '!=', 'checkpoint')->values();
+        $totalSteps = $nonCheckpointSteps->count();
         if ($totalSteps === 0) {
             return 0;
         }
 
-        $errorStep = $this->steps()->where('status', 'error')->first();
+        $errorStep = $steps->firstWhere('status', 'error');
         if ($errorStep) {
-            return (int) round((($errorStep->step_order - 1) / $totalSteps) * 100);
+            $completedSteps = $nonCheckpointSteps
+                ->filter(fn (TraceStep $step) => $step->step_order < $errorStep->step_order)
+                ->count();
+
+            return (int) round(($completedSteps / $totalSteps) * 100);
         }
 
         return 50;
@@ -109,16 +124,28 @@ class Trace extends Model
 
     public function getErrorStepAttribute(): ?TraceStep
     {
+        if ($this->relationLoaded('steps')) {
+            return $this->steps->firstWhere('status', 'error');
+        }
+
         return $this->steps()->where('status', 'error')->first();
     }
 
     public function getTotalDbQueriesAttribute(): int
     {
+        if ($this->relationLoaded('steps')) {
+            return (int) $this->steps->sum('db_query_count');
+        }
+
         return (int) $this->steps()->sum('db_query_count');
     }
 
     public function getTotalMemoryUsageAttribute(): int
     {
+        if ($this->relationLoaded('steps')) {
+            return (int) $this->steps->sum('memory_usage');
+        }
+
         return (int) $this->steps()->sum('memory_usage');
     }
 }
