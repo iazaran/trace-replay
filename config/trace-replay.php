@@ -24,9 +24,10 @@ return [
     |--------------------------------------------------------------------------
     | Sampling Rate
     |--------------------------------------------------------------------------
-    | A float between 0.0 and 1.0 controlling what fraction of HTTP requests
-    | are traced. 1.0 = trace every request, 0.1 = trace 10% at random.
-    | Manual Trace-Replay::start() calls are never sampled.
+    | A float between 0.0 and 1.0 controlling what fraction of new traces are
+    | recorded. 1.0 = trace every request/job, 0.1 = trace 10% at random.
+    | Pass forceSample: true to TraceReplay::start() for traces that must always
+    | be captured.
     */
     'sample_rate' => env('TRACE_REPLAY_SAMPLE_RATE', 1.0),
 
@@ -76,6 +77,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | DB Query Binding Capture
+    |--------------------------------------------------------------------------
+    | Query bindings may contain PII or secrets. Keep this disabled in production
+    | unless the extra detail is explicitly needed.
+    */
+    'track_db_query_bindings' => env('TRACE_REPLAY_TRACK_DB_BINDINGS', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Data Masking
     |--------------------------------------------------------------------------
     | Fields whose values will be replaced with '********' in all captured
@@ -87,11 +97,20 @@ return [
         'token',
         'api_key',
         'authorization',
+        'cookie',
         'secret',
+        'client_secret',
         'credit_card',
         'cvv',
         'ssn',
         'private_key',
+        'access_token',
+        'refresh_token',
+        'id_token',
+        'x-api-key',
+        'x-csrf-token',
+        'x-xsrf-token',
+        'set-cookie',
     ],
 
     /*
