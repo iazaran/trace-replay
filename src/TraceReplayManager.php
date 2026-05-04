@@ -19,6 +19,7 @@ use TraceReplay\Jobs\PersistTraceStepJob;
 use TraceReplay\Models\Trace;
 use TraceReplay\Models\TraceStep;
 use TraceReplay\Services\NotificationService;
+use TraceReplay\Services\PayloadMasker;
 
 class TraceReplayManager
 {
@@ -217,6 +218,7 @@ class TraceReplayManager
             $queries = [];
             if ($trackDb && $connection) {
                 $queries = array_slice($connection->getQueryLog(), (int) $frame['db_queries_before']);
+                $queries = $this->sanitizeQueries($queries);
                 $queryCount = \count($queries);
                 $queryTimeMs = round(array_sum(array_column($queries, 'time')), 2);
             }
@@ -477,14 +479,16 @@ class TraceReplayManager
                 $frame['cache_calls'][] = ['type' => $type, 'key' => $event->key, 'time' => microtime(true)];
             } elseif ($event instanceof HttpRequestSending) {
                 $frame['http_calls'][] = [
-                    'url' => $event->request->url(),
+                    'url' => $this->masker()->maskUrl($event->request->url()),
                     'method' => $event->request->method(),
                     'start' => microtime(true),
                 ];
             } elseif ($event instanceof HttpResponseReceived) {
+                $url = $this->masker()->maskUrl($event->request->url());
+
                 for ($index = count($frame['http_calls']) - 1; $index >= 0; $index--) {
                     if (
-                        ($frame['http_calls'][$index]['url'] ?? null) === $event->request->url()
+                        ($frame['http_calls'][$index]['url'] ?? null) === $url
                         && ($frame['http_calls'][$index]['method'] ?? null) === $event->request->method()
                         && ! array_key_exists('status', $frame['http_calls'][$index])
                     ) {
@@ -518,7 +522,7 @@ class TraceReplayManager
                 $frame['log_calls'][] = [
                     'level' => $event->level,
                     'message' => $event->message,
-                    'context' => $event->context,
+                    'context' => $this->masker()->mask($event->context),
                     'time' => microtime(true),
                 ];
             }
@@ -538,7 +542,7 @@ class TraceReplayManager
 
         // Recommendation 28: Truncate oversized payloads to prevent DB bloat
         $maxSize = (int) config('trace-replay.max_payload_size', 65536);
-        $keysToTruncate = ['request_payload', 'response_payload', 'state_snapshot', 'db_queries', 'cache_calls', 'http_calls', 'mail_calls'];
+        $keysToTruncate = ['request_payload', 'response_payload', 'state_snapshot', 'db_queries', 'cache_calls', 'http_calls', 'mail_calls', 'log_calls'];
 
         foreach ($keysToTruncate as $key) {
             if (isset($stepData[$key]) && ! empty($stepData[$key])) {
@@ -643,6 +647,31 @@ class TraceReplayManager
     protected function determineProjectId(): ?string
     {
         return config('trace-replay.project_id');
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $queries
+     * @return array<int, array<string, mixed>>
+     */
+    protected function sanitizeQueries(array $queries): array
+    {
+        $captureBindings = config('trace-replay.track_db_query_bindings', false);
+
+        return array_map(function (array $query) use ($captureBindings): array {
+            if (! $captureBindings && array_key_exists('bindings', $query)) {
+                $query['bindings'] = array_map(
+                    static fn () => '********',
+                    (array) $query['bindings']
+                );
+            }
+
+            return $this->masker()->mask($query);
+        }, $queries);
+    }
+
+    protected function masker(): PayloadMasker
+    {
+        return $this->app->make(PayloadMasker::class);
     }
 
     protected function supportsWorkspaceColumn(): bool

@@ -15,7 +15,7 @@ class McpController extends Controller
         $this->middleware(function ($request, $next) {
             $token = config('trace-replay.api.token');
 
-            if ($token && $request->header('Authorization') !== 'Bearer '.$token) {
+            if ($token && ! hash_equals('Bearer '.$token, $request->header('Authorization', ''))) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Unauthorized: Invalid or missing API token.',
