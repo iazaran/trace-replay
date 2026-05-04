@@ -22,9 +22,6 @@ class TraceMiddleware
             return $next($request);
         }
 
-        $masker = app(PayloadMasker::class);
-        $reqBody = $masker->mask($request->all());
-
         // W3C Trace Context propagation (Recommendation 17)
         if ($traceParent = $request->header('traceparent')) {
             TraceReplay::setTraceParent($traceParent);
@@ -39,14 +36,16 @@ class TraceMiddleware
             return $next($request);
         }
 
+        $masker = app(PayloadMasker::class);
+
         // Capture the full request payload on the HTTP step
         $requestPayload = [
             'method' => $request->method(),
             'uri' => $uri,
-            'full_url' => $request->fullUrl(),
+            'full_url' => $masker->maskUrl($request->fullUrl()),
             'host' => $request->getSchemeAndHttpHost(),
             'headers' => $masker->mask($request->headers->all()),
-            'body' => $reqBody,
+            'body' => $masker->mask($request->all()),
             'query' => $masker->mask($request->query->all()),
         ];
 
@@ -70,6 +69,10 @@ class TraceMiddleware
             return;
         }
 
+        if (! TraceReplay::getCurrentTrace()) {
+            return;
+        }
+
         $httpStatus = $response->getStatusCode();
         $status = ($httpStatus >= 400) ? 'error' : 'success';
 
@@ -83,7 +86,19 @@ class TraceMiddleware
 
         // Try to decode JSON body; fall back to truncated text (Recommendation 28)
         $maxSize = (int) config('trace-replay.max_payload_size', 65536);
-        $content = $response->getContent();
+        try {
+            $content = $response->getContent();
+        } catch (Throwable) {
+            $content = false;
+        }
+
+        if ($content === false) {
+            $responsePayload['body'] = '[TraceReplay: Response body unavailable for streamed or binary response]';
+            TraceReplay::captureResponseOnLastStep($responsePayload, $httpStatus);
+            TraceReplay::end($status);
+
+            return;
+        }
 
         if (strlen($content) > $maxSize) {
             $content = substr($content, 0, $maxSize)."\n\n[TraceReplay: Payload truncated for size]";

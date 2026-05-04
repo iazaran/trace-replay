@@ -102,21 +102,25 @@ class DashboardController extends Controller
         $todayCount = Trace::where('started_at', '>=', $today)->count();
 
         // Operations breakdown (last 7 days)
-        $operations = TraceStep::join('tr_traces', 'tr_trace_steps.trace_id', '=', 'tr_traces.id')
-            ->whereDate('tr_traces.started_at', '>=', now()->subDays(7))
-            ->selectRaw("
+        $operationsQuery = TraceStep::join('tr_traces', 'tr_trace_steps.trace_id', '=', 'tr_traces.id')
+            ->whereDate('tr_traces.started_at', '>=', now()->subDays(7));
+
+        $operations = (clone $operationsQuery)
+            ->selectRaw('
                 SUM(COALESCE(db_query_count, 0)) as db_queries,
-                SUM(COALESCE(cache_hit_count, 0) + COALESCE(cache_miss_count, 0)) as cache_calls,
-                SUM(CASE WHEN http_calls IS NOT NULL AND http_calls != '[]' AND http_calls != 'null' THEN 1 ELSE 0 END) as http_calls,
-                SUM(CASE WHEN mail_calls IS NOT NULL AND mail_calls != '[]' AND mail_calls != 'null' THEN 1 ELSE 0 END) as mail_calls
-            ")
+                SUM(COALESCE(cache_hit_count, 0) + COALESCE(cache_miss_count, 0)) as cache_calls
+            ')
             ->first();
 
         $operationsData = [
             'db_queries' => (int) ($operations->db_queries ?? 0),
             'cache_calls' => (int) ($operations->cache_calls ?? 0),
-            'http_calls' => (int) ($operations->http_calls ?? 0),
-            'mail_calls' => (int) ($operations->mail_calls ?? 0),
+            'http_calls' => (clone $operationsQuery)
+                ->whereJsonLength('tr_trace_steps.http_calls', '>', 0)
+                ->count('tr_trace_steps.id'),
+            'mail_calls' => (clone $operationsQuery)
+                ->whereJsonLength('tr_trace_steps.mail_calls', '>', 0)
+                ->count('tr_trace_steps.id'),
         ];
 
         return [
@@ -173,13 +177,13 @@ class DashboardController extends Controller
 
     public function stats(): JsonResponse
     {
-        $stats = Trace::selectRaw('
+        $stats = Trace::selectRaw("
             count(*) as total,
-            count(case when status = "error" then 1 end) as failed,
-            count(case when status = "success" then 1 end) as success,
+            count(case when status = 'error' then 1 end) as failed,
+            count(case when status = 'success' then 1 end) as success,
             avg(duration_ms) as avg_duration,
             max(duration_ms) as slowest
-        ')->first();
+        ")->first();
 
         $today = Trace::whereDate('started_at', now()->today())->count();
 
