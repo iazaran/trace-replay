@@ -16,6 +16,7 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\AssertionFailedError;
 use Symfony\Component\Mime\Email;
 use TraceReplay\Facades\TraceReplay;
+use TraceReplay\Http\Middleware\TraceMiddleware;
 use TraceReplay\Models\Project;
 use TraceReplay\Models\Trace;
 use TraceReplay\Models\TraceStep;
@@ -239,6 +240,39 @@ it('PayloadMasker masks configured sensitive fields', function () {
         ->and($result['data']['token'])->toBe('********');
 });
 
+it('PayloadMasker masks sensitive URL query parameters', function () {
+    config(['trace-replay.mask_fields' => ['token', 'access_token']]);
+
+    $masker = new PayloadMasker;
+    $url = $masker->maskUrl('https://example.test/callback?token=secret&access_token=abc&safe=1');
+
+    expect(urldecode($url))->toBe('https://example.test/callback?token=********&access_token=********&safe=1')
+        ->and($url)->not->toContain('secret')
+        ->and($url)->not->toContain('abc');
+});
+
+it('PayloadMasker masks URL passwords', function () {
+    $masker = new PayloadMasker;
+
+    expect($masker->maskUrl('https://user:secret@example.test/path'))
+        ->toBe('https://user:********@example.test/path');
+});
+
+it('PayloadMasker matches sensitive fields across common key formats', function () {
+    config(['trace-replay.mask_fields' => ['access_token', 'client-secret']]);
+
+    $masker = new PayloadMasker;
+    $result = $masker->mask([
+        'accessToken' => 'abc',
+        'client_secret' => 'def',
+        'safe' => 'value',
+    ]);
+
+    expect($result['accessToken'])->toBe('********')
+        ->and($result['client_secret'])->toBe('********')
+        ->and($result['safe'])->toBe('value');
+});
+
 // ── AiPromptService ───────────────────────────────────────────────────────────
 
 it('AiPromptService generates a prompt for a failed trace', function () {
@@ -419,6 +453,44 @@ it('dashboard stats endpoint returns JSON', function () {
     $response->assertJson(['total' => 2, 'success' => 1, 'failed' => 1]);
 });
 
+it('dashboard operations count only non-empty http and mail call arrays', function () {
+    $trace = Trace::factory()->create(['started_at' => now()]);
+
+    TraceStep::factory()->create([
+        'trace_id' => $trace->id,
+        'step_order' => 1,
+        'http_calls' => null,
+        'mail_calls' => null,
+    ]);
+
+    TraceStep::factory()->create([
+        'trace_id' => $trace->id,
+        'step_order' => 2,
+        'http_calls' => [],
+        'mail_calls' => [],
+    ]);
+
+    TraceStep::factory()->create([
+        'trace_id' => $trace->id,
+        'step_order' => 3,
+        'http_calls' => [
+            ['method' => 'GET', 'url' => 'https://example.com/status'],
+        ],
+        'mail_calls' => [
+            ['to' => ['user@example.com'], 'subject' => 'Trace failed'],
+        ],
+    ]);
+
+    $response = $this->get('/trace-replay');
+
+    $response->assertOk();
+
+    $operations = $response->viewData('stats')['operations'];
+
+    expect($operations['http_calls'])->toBe(1)
+        ->and($operations['mail_calls'])->toBe(1);
+});
+
 it('dashboard export downloads JSON file', function () {
     $trace = Trace::factory()->create(['name' => 'Export Me']);
 
@@ -562,6 +634,60 @@ it('TraceMiddleware skips instrumentation when header requests it', function () 
     $this->get('/skip-test', ['X-TraceReplay-Skip' => '1'])->assertOk();
 
     expect(Trace::where('name', 'like', 'HTTP GET /skip-test%')->count())->toBe(0);
+});
+
+it('TraceMiddleware avoids payload masking work when sampling skips a request', function () {
+    config(['trace-replay.sample_rate' => 0]);
+
+    app()->instance(PayloadMasker::class, new class extends PayloadMasker
+    {
+        public function mask(mixed $data): mixed
+        {
+            throw new RuntimeException('Payload masking should not run for sampled-out requests.');
+        }
+
+        public function maskUrl(?string $url): ?string
+        {
+            throw new RuntimeException('URL masking should not run for sampled-out requests.');
+        }
+    });
+
+    Route::middleware([TraceMiddleware::class])->post('/sampled-out-test', fn () => response()->json(['ok' => true]));
+
+    $this->postJson('/sampled-out-test', ['token' => 'secret'])->assertOk();
+
+    expect(Trace::where('name', 'HTTP POST /sampled-out-test')->count())->toBe(0);
+});
+
+it('TraceMiddleware masks sensitive query parameters in stored full URLs', function () {
+    Route::middleware([TraceMiddleware::class])->get('/mask-url-test', fn () => response()->json(['ok' => true]));
+
+    $this->get('/mask-url-test?token=secret-token&safe=1')->assertOk();
+
+    $step = Trace::where('name', 'HTTP GET /mask-url-test')->firstOrFail()
+        ->steps()
+        ->firstOrFail();
+
+    expect(urldecode($step->request_payload['full_url']))->toContain('token=********')
+        ->and($step->request_payload['full_url'])->not->toContain('secret-token')
+        ->and($step->request_payload['query']['token'])->toBe('********');
+});
+
+it('TraceMiddleware safely records streamed response metadata', function () {
+    Route::middleware([TraceMiddleware::class])->get('/streamed-response-test', fn () => response()->stream(function () {
+        echo 'streamed';
+    }));
+
+    $this->get('/streamed-response-test')->assertOk();
+
+    $step = Trace::where('name', 'HTTP GET /streamed-response-test')->firstOrFail()
+        ->steps()
+        ->firstOrFail();
+
+    expect($step->response_payload)->toMatchArray([
+        'status' => 200,
+        'body' => '[TraceReplay: Response body unavailable for streamed or binary response]',
+    ]);
 });
 
 // ── Auth Middleware ──────────────────────────────────────────────────────────
@@ -841,6 +967,24 @@ it('step records db query count when tracking is enabled', function () {
     $step = TraceReplay::getCurrentTrace()->steps()->first();
 
     expect($step->db_query_count)->toBeGreaterThanOrEqual(1);
+});
+
+it('step redacts db query bindings by default', function () {
+    config(['trace-replay.track_db_queries' => true]);
+
+    TraceReplay::start('DB Binding Redaction');
+    TraceReplay::step('Sensitive Query', function () {
+        DB::select('select count(*) as aggregate from tr_traces where name = ?', ['secret@example.com']);
+    });
+
+    $step = TraceReplay::getCurrentTrace()->steps()->first();
+
+    $bindings = collect($step->db_queries)
+        ->flatMap(fn (array $query) => $query['bindings'] ?? [])
+        ->all();
+
+    expect($bindings)->toContain('********')
+        ->and($bindings)->not->toContain('secret@example.com');
 });
 
 it('step query tracking restores the query log state after the step finishes', function () {
@@ -1204,12 +1348,27 @@ it('step records log_calls when a log message is emitted inside the step', funct
         ->and($step->log_calls[0]['message'])->toBe('Something happened');
 });
 
+it('step masks sensitive log context before storing it', function () {
+    TraceReplay::start('Masked Log Tracking');
+
+    TraceReplay::step('Logging Step', function () {
+        Log::warning('Login failed', ['token' => 'secret-token', 'user_id' => 123]);
+    });
+
+    $step = TraceReplay::getCurrentTrace()->steps()->first();
+
+    expect($step->log_calls[0]['context'])->toMatchArray([
+        'token' => '********',
+        'user_id' => 123,
+    ]);
+});
+
 it('step records repeated HTTP calls to the same endpoint independently', function () {
     TraceReplay::start('HTTP Tracking');
 
     TraceReplay::step('Outgoing HTTP', function () {
-        $requestA = new HttpRequest(new PsrRequest('GET', 'https://example.test/users'));
-        $requestB = new HttpRequest(new PsrRequest('GET', 'https://example.test/users'));
+        $requestA = new HttpRequest(new PsrRequest('GET', 'https://example.test/users?access_token=secret-token'));
+        $requestB = new HttpRequest(new PsrRequest('GET', 'https://example.test/users?access_token=secret-token'));
 
         app('trace-replay')->recordEvent(new RequestSending($requestA));
         app('trace-replay')->recordEvent(new ResponseReceived($requestA, new HttpClientResponse(new PsrResponse(200))));
@@ -1222,7 +1381,9 @@ it('step records repeated HTTP calls to the same endpoint independently', functi
 
     expect($step->http_calls)->toHaveCount(2)
         ->and($step->http_calls[0]['status'])->toBe(200)
-        ->and($step->http_calls[1]['status'])->toBe(201);
+        ->and($step->http_calls[1]['status'])->toBe(201)
+        ->and(urldecode($step->http_calls[0]['url']))->toContain('access_token=********')
+        ->and($step->http_calls[0]['url'])->not->toContain('secret-token');
 });
 
 it('step stores null for log_calls when no log messages are emitted', function () {
