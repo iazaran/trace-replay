@@ -109,8 +109,14 @@ return [
     // 0.1 = trace 10% of requests/jobs/commands
     'sample_rate' => env('TRACE_REPLAY_SAMPLE_RATE', 1.0),
 
-    // Automatically mask these keys in payloads
-    'mask_fields' => ['password', 'token', 'api_key', 'authorization', 'secret'],
+    // Disable on low-cost production servers if query-log overhead is too high
+    'track_db_queries' => env('TRACE_REPLAY_TRACK_DB', true),
+
+    // Automatically mask these keys in payloads, headers, and URL query strings
+    'mask_fields' => ['password', 'token', 'api_key', 'authorization', 'cookie', 'secret'],
+
+    // Query bindings can contain PII; keep disabled in production unless needed
+    'track_db_query_bindings' => env('TRACE_REPLAY_TRACK_DB_BINDINGS', false),
 
     // Dashbord security: only users passing the "view-trace-replay" gate can access
     'middleware' => ['web', 'auth'],
@@ -134,6 +140,15 @@ return [
         'livewire' => true,
     ],
 ];
+```
+
+For low-cost production servers, start with sampling instead of tracing every
+request:
+
+```env
+TRACE_REPLAY_SAMPLE_RATE=0.05
+TRACE_REPLAY_TRACK_DB=false
+TRACE_REPLAY_MAX_PAYLOAD_SIZE=16384
 ```
 
 ---
