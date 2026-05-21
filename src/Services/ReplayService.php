@@ -32,9 +32,10 @@ class ReplayService
             throw new \Exception('Cannot determine target host for replay. Set TRACE_REPLAY_REPLAY_URL or pass an override_url.');
         }
 
-        unset($headers['host'], $headers['Host'], $headers['cookie'], $headers['Cookie']);
+        $headers = $this->sanitizeReplayHeaders($headers);
 
         $targetUrl = $this->buildTargetUrl($uri, $baseUrl, $query);
+        $this->assertReplayTargetAllowed($targetUrl, $payload, $overrideUrl !== null);
 
         $isJson = str_contains($headers['content-type'][0] ?? '', 'json');
 
@@ -119,9 +120,16 @@ class ReplayService
 
     protected function buildTargetUrl(string $uri, string $baseUrl, array $query): string
     {
-        $target = filter_var($uri, FILTER_VALIDATE_URL)
-            ? $uri
-            : rtrim($baseUrl, '/').'/'.ltrim($uri, '/');
+        $parts = parse_url($uri);
+        $path = is_array($parts) ? ($parts['path'] ?? '/') : $uri;
+        $uriQuery = [];
+
+        if (is_array($parts) && isset($parts['query'])) {
+            parse_str($parts['query'], $uriQuery);
+        }
+
+        $target = rtrim($baseUrl, '/').'/'.ltrim($path, '/');
+        $query = array_merge($uriQuery, $query);
 
         if (! empty($query)) {
             $separator = str_contains($target, '?') ? '&' : '?';
@@ -129,6 +137,108 @@ class ReplayService
         }
 
         return $target;
+    }
+
+    protected function sanitizeReplayHeaders(array $headers): array
+    {
+        foreach (array_keys($headers) as $name) {
+            if ($this->shouldStripHeader((string) $name)) {
+                unset($headers[$name]);
+            }
+        }
+
+        return $headers;
+    }
+
+    protected function shouldStripHeader(string $name): bool
+    {
+        $normalized = strtolower($name);
+
+        return \in_array($normalized, [
+            'host',
+            'cookie',
+            'authorization',
+            'proxy-authorization',
+            'x-csrf-token',
+            'x-xsrf-token',
+            'csrf-token',
+            'forwarded',
+        ], true) || str_starts_with($normalized, 'x-forwarded-');
+    }
+
+    protected function assertReplayTargetAllowed(string $targetUrl, array $payload, bool $usingOverride): void
+    {
+        $targetHost = $this->hostFromUrl($targetUrl);
+
+        if (! $targetHost) {
+            throw new \Exception('Cannot determine replay target host.');
+        }
+
+        $allowedHosts = array_values(array_filter(
+            (array) config('trace-replay.replay.allowed_hosts', []),
+            fn ($host) => is_string($host) && trim($host) !== ''
+        ));
+
+        if ($allowedHosts !== []) {
+            if (! $this->hostMatchesAllowed($targetHost, $allowedHosts)) {
+                throw new \Exception("Replay target host [{$targetHost}] is not allowed by trace-replay.replay.allowed_hosts.");
+            }
+
+            return;
+        }
+
+        if (! $usingOverride) {
+            return;
+        }
+
+        $originalHost = $this->hostFromUrl($payload['host'] ?? null)
+            ?? $this->hostFromUrl($payload['full_url'] ?? null);
+
+        if (! $originalHost || $targetHost !== $originalHost) {
+            throw new \Exception("Replay override host [{$targetHost}] is not allowed. Configure trace-replay.replay.allowed_hosts to permit it.");
+        }
+    }
+
+    protected function hostFromUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || trim($url) === '') {
+            return null;
+        }
+
+        $url = trim($url);
+        $parseTarget = str_contains($url, '://') ? $url : 'http://'.$url;
+        $host = parse_url($parseTarget, PHP_URL_HOST);
+
+        return is_string($host) && $host !== ''
+            ? strtolower(trim($host, '[]'))
+            : null;
+    }
+
+    /**
+     * @param  array<int, string>  $allowedHosts
+     */
+    protected function hostMatchesAllowed(string $host, array $allowedHosts): bool
+    {
+        foreach ($allowedHosts as $allowedHost) {
+            $allowedHost = trim(strtolower($allowedHost));
+            $allowedHost = str_contains($allowedHost, '://')
+                ? (string) parse_url($allowedHost, PHP_URL_HOST)
+                : preg_replace('/:\d+$/', '', $allowedHost);
+
+            if (! $allowedHost) {
+                continue;
+            }
+
+            if ($allowedHost === $host) {
+                return true;
+            }
+
+            if (str_starts_with($allowedHost, '*.') && str_ends_with($host, substr($allowedHost, 1))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function normalizeHeaders(array $headers): array
@@ -154,7 +264,6 @@ class ReplayService
                 if (is_array($value) && is_array($replay[$key])) {
                     $diff[$key] = $this->generateDiff($value, $replay[$key]);
                 } else {
-                    // Handle scalar vs array type changes (Recommendation 37)
                     $diff[$key] = [
                         'status' => is_array($value) !== is_array($replay[$key]) ? 'type_changed' : 'changed',
                         'original' => $value,

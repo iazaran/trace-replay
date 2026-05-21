@@ -27,7 +27,9 @@ class AiPromptService
             return 'This trace completed successfully with no errors recorded. Nothing to debug.';
         }
 
-        $steps = $trace->steps()->orderBy('step_order')->get();
+        $steps = $trace->relationLoaded('steps')
+            ? $trace->steps->sortBy('step_order')->values()
+            : $trace->steps()->orderBy('step_order')->get();
         $app = config('app.name', 'Laravel');
 
         $prompt = "You are an expert Laravel/PHP engineer. Your task is to diagnose and fix a failed request.\n\n";

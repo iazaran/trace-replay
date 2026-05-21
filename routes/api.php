@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use TraceReplay\Http\Controllers\Api\McpController;
 
 Route::group([
-    'prefix' => 'api/trace-replay',
+    'prefix' => config('trace-replay.api.route_prefix', 'api/trace-replay'),
     'as' => 'trace-replay.api.',
     'middleware' => array_merge(
         config('trace-replay.api.middleware', ['api']),

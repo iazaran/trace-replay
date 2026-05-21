@@ -2,9 +2,11 @@
 
 namespace TraceReplay\Http\Controllers\Api;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use TraceReplay\Models\Trace;
+use TraceReplay\Models\TraceStep;
 use TraceReplay\Services\AiPromptService;
 use TraceReplay\Services\ReplayService;
 
@@ -15,29 +17,38 @@ class McpController extends Controller
         $this->middleware(function ($request, $next) {
             $token = config('trace-replay.api.token');
 
-            if ($token && ! hash_equals('Bearer '.$token, $request->header('Authorization', ''))) {
+            if (! $token) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Trace-Replay API token is not configured. Set TRACE_REPLAY_API_TOKEN to enable API access.',
+                ], 403);
+            }
+
+            if (! hash_equals('Bearer '.$token, $request->header('Authorization', ''))) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Unauthorized: Invalid or missing API token.',
                 ], 401);
             }
 
-            // If token is NOT set, we allow it ONLY if it's explicitly disabled/enabled?
-            // Recommendation 15 says "Default the API to disabled unless the token is set."
-            if (! $token) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'API is disabled. Please set TRACE_REPLAY_API_TOKEN in your .env.',
-                ], 403);
-            }
-
             return $next($request);
         });
     }
 
-    public function listTraces(Request $request)
+    public function listTraces(Request $request): JsonResponse
     {
         $query = Trace::withCount('steps')->orderBy('started_at', 'desc');
+
+        if ($status = $request->query('status')) {
+            if (! $this->isAllowedStatus($status)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Invalid status. Use success, error, or processing.',
+                ], 422);
+            }
+
+            $query->where('status', $status);
+        }
 
         if ($request->boolean('filter_by_error')) {
             $query->where('status', 'error');
@@ -45,26 +56,30 @@ class McpController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $query->paginate(20),
+            'data' => $query->paginate($this->resolveLimit($request->query('limit'))),
         ]);
     }
 
-    public function getContext($id)
+    public function getContext(Request $request, string $id): JsonResponse
     {
-        $trace = Trace::with('steps')->findOrFail($id);
+        $stepLimit = $this->resolveStepLimit($request->query('step_limit'));
+        $trace = $this->loadTraceContext($id, $stepLimit);
+        $errorStep = $this->resolveErrorStep($trace);
 
         return response()->json([
             'status' => 'success',
             'data' => [
                 'trace' => $trace,
-                'completion_percentage' => $trace->completion_percentage,
+                'completion_percentage' => $this->resolveCompletionPercentage($trace, $errorStep),
                 'total_duration' => $trace->duration_ms,
-                'error_step' => $trace->error_step,
+                'error_step' => $errorStep,
+                'step_limit' => $stepLimit,
+                'steps_returned' => $trace->steps->count(),
             ],
         ]);
     }
 
-    public function triggerReplay(Request $request, $id, ReplayService $replayService)
+    public function triggerReplay(Request $request, string $id, ReplayService $replayService): JsonResponse
     {
         $trace = Trace::with('steps')->findOrFail($id);
 
@@ -84,7 +99,7 @@ class McpController extends Controller
         }
     }
 
-    public function generateFixPrompt($id, AiPromptService $promptService)
+    public function generateFixPrompt(string $id, AiPromptService $promptService): JsonResponse
     {
         $trace = Trace::with('steps')->findOrFail($id);
 
@@ -99,7 +114,7 @@ class McpController extends Controller
     /**
      * Optional JSON-RPC 2.0 handler
      */
-    public function handleRpc(Request $request, ReplayService $replayService, AiPromptService $promptService)
+    public function handleRpc(Request $request, ReplayService $replayService, AiPromptService $promptService): JsonResponse
     {
         $method = $request->input('method');
         $params = $request->input('params', []);
@@ -108,18 +123,29 @@ class McpController extends Controller
             switch ($method) {
                 case 'list_traces':
                     $query = Trace::withCount('steps')->orderBy('started_at', 'desc');
+                    if (isset($params['status'])) {
+                        if (! $this->isAllowedStatus($params['status'])) {
+                            throw new \InvalidArgumentException('Invalid status. Use success, error, or processing.', -32602);
+                        }
+
+                        $query->where('status', $params['status']);
+                    }
                     if (isset($params['filter_by_error']) && $params['filter_by_error']) {
                         $query->where('status', 'error');
                     }
-                    $result = $query->paginate(20)->toArray();
+                    $result = $query->paginate($this->resolveLimit($params['limit'] ?? null))->toArray();
                     break;
 
                 case 'get_trace_context':
-                    $trace = Trace::with('steps')->findOrFail($params['trace_id']);
+                    $stepLimit = $this->resolveStepLimit($params['step_limit'] ?? null);
+                    $trace = $this->loadTraceContext($params['trace_id'], $stepLimit);
+                    $errorStep = $this->resolveErrorStep($trace);
                     $result = [
                         'trace' => $trace,
-                        'completion_percentage' => $trace->completion_percentage,
-                        'error_step' => $trace->error_step,
+                        'completion_percentage' => $this->resolveCompletionPercentage($trace, $errorStep),
+                        'error_step' => $errorStep,
+                        'step_limit' => $stepLimit,
+                        'steps_returned' => $trace->steps->count(),
                     ];
                     break;
 
@@ -152,5 +178,73 @@ class McpController extends Controller
                 'id' => $request->input('id'),
             ]);
         }
+    }
+
+    protected function resolveLimit(mixed $limit): int
+    {
+        if ($limit === null || $limit === '' || is_array($limit)) {
+            return 20;
+        }
+
+        return min(max((int) $limit, 1), 100);
+    }
+
+    protected function resolveStepLimit(mixed $limit): int
+    {
+        $max = max((int) config('trace-replay.api.max_steps', 500), 1);
+
+        if ($limit === null || $limit === '' || is_array($limit)) {
+            return $max;
+        }
+
+        return min(max((int) $limit, 1), $max);
+    }
+
+    protected function loadTraceContext(string $id, int $stepLimit): Trace
+    {
+        $trace = Trace::findOrFail($id);
+        $trace->setRelation('steps', $trace->steps()
+            ->orderBy('step_order')
+            ->limit($stepLimit)
+            ->get());
+
+        return $trace;
+    }
+
+    protected function resolveErrorStep(Trace $trace): ?TraceStep
+    {
+        return $trace->steps()
+            ->where('status', 'error')
+            ->orderBy('step_order')
+            ->first();
+    }
+
+    protected function resolveCompletionPercentage(Trace $trace, ?TraceStep $errorStep): int
+    {
+        if ($trace->status === 'success') {
+            return 100;
+        }
+
+        $totalSteps = $trace->steps()->where('type', '!=', 'checkpoint')->count();
+
+        if ($totalSteps === 0) {
+            return 0;
+        }
+
+        if ($errorStep) {
+            $completedSteps = $trace->steps()
+                ->where('type', '!=', 'checkpoint')
+                ->where('step_order', '<', $errorStep->step_order)
+                ->count();
+
+            return (int) round(($completedSteps / $totalSteps) * 100);
+        }
+
+        return 50;
+    }
+
+    protected function isAllowedStatus(mixed $status): bool
+    {
+        return \is_string($status) && \in_array($status, ['success', 'error', 'processing'], true);
     }
 }

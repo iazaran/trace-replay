@@ -3,6 +3,7 @@
 namespace TraceReplay\Testing;
 
 use PHPUnit\Framework\Assert as PHPUnit;
+use Throwable;
 use TraceReplay\Models\Trace;
 
 class TraceReplayFake
@@ -19,11 +20,12 @@ class TraceReplayFake
 
     protected ?string $traceParent = null;
 
-    public function start(string $name, array $tags = [], bool $forceSample = false): Trace
+    public function start(string $name, array $tags = [], string $type = 'http', bool $forceSample = false): Trace
     {
         $this->currentTrace = [
             'name' => $name,
             'tags' => $tags,
+            'type' => $type,
             'steps' => [],
             'status' => 'processing',
         ];
@@ -40,6 +42,7 @@ class TraceReplayFake
             'id' => '00000000-0000-0000-0000-000000000000',
             'name' => $name,
             'tags' => $tags,
+            'type' => $type,
         ]);
     }
 
@@ -73,7 +76,7 @@ class TraceReplayFake
         return $this;
     }
 
-    public function end(string $status = 'success'): void
+    public function end(string $status = 'success', ?Throwable $exception = null): void
     {
         if ($this->currentTrace) {
             $this->recordedTraces[$this->currentTrace['_recorded_index']]['status'] = $status;
@@ -110,6 +113,11 @@ class TraceReplayFake
     }
 
     public function captureResponseOnLastStep(array $responsePayload, int $httpStatus = 200): void
+    {
+        // No-op in fake — kept for interface parity
+    }
+
+    public function captureException(Throwable $exception): void
     {
         // No-op in fake — kept for interface parity
     }

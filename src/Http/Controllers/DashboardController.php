@@ -62,15 +62,18 @@ class DashboardController extends Controller
     {
         $today = now()->startOfDay();
         $lastHour = now()->subHour();
+        $statsSince = now()->subDays(30);
 
-        // General stats
+        // General stats are bounded to avoid full-table aggregates on large trace tables.
         $totals = Trace::selectRaw("
             COUNT(*) as total,
             SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
             SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as errors,
             SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing,
             AVG(duration_ms) as avg_duration
-        ")->first();
+        ")
+            ->where('started_at', '>=', $statsSince)
+            ->first();
 
         // By type
         $byType = Trace::selectRaw('type, COUNT(*) as count')
@@ -177,13 +180,17 @@ class DashboardController extends Controller
 
     public function stats(): JsonResponse
     {
+        $since = now()->subDays(30);
+
         $stats = Trace::selectRaw("
             count(*) as total,
             count(case when status = 'error' then 1 end) as failed,
             count(case when status = 'success' then 1 end) as success,
             avg(duration_ms) as avg_duration,
             max(duration_ms) as slowest
-        ")->first();
+        ")
+            ->where('started_at', '>=', $since)
+            ->first();
 
         $today = Trace::whereDate('started_at', now()->today())->count();
 

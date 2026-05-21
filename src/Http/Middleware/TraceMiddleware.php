@@ -17,12 +17,10 @@ class TraceMiddleware
             return $next($request);
         }
 
-        // Recommendation 27: Skip trace-replay dashboard routes reliably by name
         if ($this->shouldSkipInstrumentation($request)) {
             return $next($request);
         }
 
-        // W3C Trace Context propagation (Recommendation 17)
         if ($traceParent = $request->header('traceparent')) {
             TraceReplay::setTraceParent($traceParent);
         }
@@ -84,7 +82,7 @@ class TraceMiddleware
             'headers' => $masker->mask($response->headers->all()),
         ];
 
-        // Try to decode JSON body; fall back to truncated text (Recommendation 28)
+        // Try to decode JSON body; fall back to truncated text.
         $maxSize = (int) config('trace-replay.max_payload_size', 65536);
         try {
             $content = $response->getContent();
@@ -115,10 +113,6 @@ class TraceMiddleware
 
     protected function shouldSkipInstrumentation(Request $request): bool
     {
-        if (! config('trace-replay.enabled')) {
-            return true;
-        }
-
         if ($request->headers->has('X-TraceReplay-Skip')) {
             return true;
         }
@@ -129,8 +123,15 @@ class TraceMiddleware
         }
 
         $path = ltrim($request->path(), '/');
-        foreach (['trace-replay', 'api/trace-replay'] as $prefix) {
-            if (str_starts_with($path, $prefix)) {
+        $prefixes = [
+            config('trace-replay.route_prefix', 'trace-replay'),
+            config('trace-replay.api.route_prefix', 'api/trace-replay'),
+        ];
+
+        foreach ($prefixes as $prefix) {
+            $prefix = trim((string) $prefix, '/');
+
+            if ($prefix !== '' && ($path === $prefix || str_starts_with($path, $prefix.'/'))) {
                 return true;
             }
         }
