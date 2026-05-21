@@ -24,4 +24,4 @@ jobs:
         run: composer install --prefer-dist --no-interaction --no-progress
 
       - name: Check code styling (Laravel Pint)
-        run: pint --test
+        run: composer format:test

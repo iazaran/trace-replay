@@ -5,7 +5,6 @@ parameters:
         - config
         - database
     tmpDir: build/phpstan
-    checkMissingIterableValueType: false
     ignoreErrors:
         - '#Unsafe usage of new static\(\)#'
         - '#Function config_path not found#'
