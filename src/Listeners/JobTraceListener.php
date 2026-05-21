@@ -19,9 +19,16 @@ class JobTraceListener
             'job_id' => $event->job->getJobId(),
         ], 'job');
 
-        TraceReplay::checkpoint('Job Started', [
-            'payload' => $event->job->payload(),
-        ]);
+        $state = [
+            'queue' => $event->job->getQueue(),
+            'job_id' => $event->job->getJobId(),
+        ];
+
+        if (config('trace-replay.auto_trace.capture_job_payload', false)) {
+            $state['payload'] = $event->job->payload();
+        }
+
+        TraceReplay::checkpoint('Job Started', $state);
     }
 
     public function onJobProcessed(JobProcessed $_event): void
@@ -32,10 +39,6 @@ class JobTraceListener
 
     public function onJobFailed(JobFailed $event): void
     {
-        if (! config('trace-replay.auto_trace.jobs', true)) {
-            return;
-        }
-
         TraceReplay::checkpoint('Job Failed', [
             'error' => $event->exception->getMessage(),
         ]);

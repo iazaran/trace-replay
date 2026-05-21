@@ -16,9 +16,17 @@ class PruneTracesCommand extends Command
 
     public function handle(): int
     {
-        $days = (int) ($this->option('days') ?? config('trace-replay.retention_days', 30));
+        $configuredDays = config('trace-replay.retention_days', 30);
+        $daysOption = $this->option('days');
+        $days = $daysOption !== null ? (int) $daysOption : ($configuredDays === null ? null : (int) $configuredDays);
         $status = $this->option('status');
         $dryRun = $this->option('dry-run');
+
+        if ($days === null) {
+            $this->info('Trace pruning is disabled because trace-replay.retention_days is null. Pass --days to override.');
+
+            return self::SUCCESS;
+        }
 
         if ($days <= 0) {
             $this->error('Retention days must be a positive integer.');

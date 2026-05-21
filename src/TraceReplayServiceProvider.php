@@ -20,7 +20,9 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
+use TraceReplay\Console\Commands\DoctorCommand;
 use TraceReplay\Console\Commands\ExportTraceCommand;
+use TraceReplay\Console\Commands\InstallCommand;
 use TraceReplay\Console\Commands\PruneTracesCommand;
 use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Listeners\CommandTraceListener;
@@ -76,8 +78,10 @@ class TraceReplayServiceProvider extends ServiceProvider
             ], 'trace-replay-views');
 
             $this->commands([
+                DoctorCommand::class,
                 PruneTracesCommand::class,
                 ExportTraceCommand::class,
+                InstallCommand::class,
             ]);
         }
 

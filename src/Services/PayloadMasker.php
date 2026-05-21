@@ -4,20 +4,6 @@ namespace TraceReplay\Services;
 
 class PayloadMasker
 {
-    /** @var array<string> */
-    protected array $fields;
-
-    public function __construct()
-    {
-        $this->fields = array_map(
-            fn (string $field) => $this->normalizeKey($field),
-            config('trace-replay.mask_fields', [
-                'password', 'password_confirmation', 'token',
-                'api_key', 'authorization', 'secret', 'credit_card',
-            ])
-        );
-    }
-
     /**
      * Recursively mask sensitive fields in an array.
      */
@@ -28,8 +14,10 @@ class PayloadMasker
         }
 
         $result = [];
+        $fields = $this->fields();
+
         foreach ($data as $key => $value) {
-            if (\in_array($this->normalizeKey((string) $key), $this->fields, true)) {
+            if (\in_array($this->normalizeKey((string) $key), $fields, true)) {
                 $result[$key] = '********';
             } elseif (is_array($value)) {
                 $result[$key] = $this->mask($value);
@@ -39,6 +27,20 @@ class PayloadMasker
         }
 
         return $result;
+    }
+
+    /**
+     * @return array<string>
+     */
+    protected function fields(): array
+    {
+        return array_map(
+            fn (string $field) => $this->normalizeKey($field),
+            config('trace-replay.mask_fields', [
+                'password', 'password_confirmation', 'token',
+                'api_key', 'authorization', 'secret', 'credit_card',
+            ])
+        );
     }
 
     public function maskUrl(?string $url): ?string

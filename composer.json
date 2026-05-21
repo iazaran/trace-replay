@@ -63,5 +63,10 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true
         }
+    },
+    "scripts": {
+        "test": "pest",
+        "format": "pint",
+        "format:test": "pint --test"
     }
 }

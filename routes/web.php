@@ -10,7 +10,7 @@ $middleware = array_merge(
 );
 
 Route::group([
-    'prefix' => 'trace-replay',
+    'prefix' => config('trace-replay.route_prefix', 'trace-replay'),
     'as' => 'trace-replay.',
     'middleware' => $middleware,
 ], function () {

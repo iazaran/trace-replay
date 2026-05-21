@@ -15,10 +15,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Throwable;
+use TraceReplay\Jobs\NotifyTraceFailureJob;
 use TraceReplay\Jobs\PersistTraceStepJob;
 use TraceReplay\Models\Trace;
 use TraceReplay\Models\TraceStep;
-use TraceReplay\Services\NotificationService;
 use TraceReplay\Services\PayloadMasker;
 
 class TraceReplayManager
@@ -96,7 +96,7 @@ class TraceReplayManager
         // Respect sampling rate unless forced (e.g. manual calls or specific job types)
         if (! $forceSample) {
             $sampleRate = (float) config('trace-replay.sample_rate', 1.0);
-            if ($sampleRate < 1.0 && mt_rand() / mt_getrandmax() > $sampleRate) {
+            if ($sampleRate < 1.0 && random_int(1, 1000000) / 1000000 > $sampleRate) {
                 return null;
             }
         }
@@ -423,7 +423,7 @@ class TraceReplayManager
             // Fire notification if configured and trace failed
             if ($status === 'error' && config('trace-replay.notifications.on_failure', false)) {
                 try {
-                    app(NotificationService::class)->notifyFailure($this->currentTrace->fresh(['steps']));
+                    NotifyTraceFailureJob::dispatch($this->currentTrace->id)->afterResponse();
                 } catch (Throwable) {
                 }
             }
@@ -439,8 +439,8 @@ class TraceReplayManager
             $this->startedAtMicrotime = null;
             $this->traceParent = null;
             $this->traceDepth = 0;
-            // Note: workspaceId and projectId persist across start/end if set via middleware/manually
-            // but in Octane they should be reset if they depend on the request.
+            $this->workspaceId = null;
+            $this->projectId = null;
         }
     }
 
@@ -540,14 +540,14 @@ class TraceReplayManager
     {
         $stepData = $step->toArray();
 
-        // Recommendation 28: Truncate oversized payloads to prevent DB bloat
         $maxSize = (int) config('trace-replay.max_payload_size', 65536);
-        $keysToTruncate = ['request_payload', 'response_payload', 'state_snapshot', 'db_queries', 'cache_calls', 'http_calls', 'mail_calls', 'log_calls'];
+        $keysToSanitize = ['request_payload', 'response_payload', 'state_snapshot', 'db_queries', 'cache_calls', 'http_calls', 'mail_calls', 'log_calls', 'error_reason'];
 
-        foreach ($keysToTruncate as $key) {
+        foreach ($keysToSanitize as $key) {
             if (isset($stepData[$key]) && ! empty($stepData[$key])) {
+                $stepData[$key] = $this->masker()->mask($stepData[$key]);
                 $encoded = json_encode($stepData[$key]);
-                if (strlen($encoded) > $maxSize) {
+                if ($encoded !== false && strlen($encoded) > $maxSize) {
                     $stepData[$key] = [
                         '_truncated' => true,
                         'original_size' => strlen($encoded),
