@@ -7,6 +7,7 @@ use Illuminate\Http\Client\Events\ResponseReceived;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Http\Client\Response as HttpClientResponse;
 use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +18,7 @@ use PHPUnit\Framework\AssertionFailedError;
 use Symfony\Component\Mime\Email;
 use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Http\Middleware\TraceMiddleware;
+use TraceReplay\Jobs\NotifyTraceFailureJob;
 use TraceReplay\Models\Project;
 use TraceReplay\Models\Trace;
 use TraceReplay\Models\TraceStep;
@@ -273,6 +275,18 @@ it('PayloadMasker matches sensitive fields across common key formats', function 
         ->and($result['safe'])->toBe('value');
 });
 
+it('PayloadMasker reads mask fields lazily for singleton config changes', function () {
+    config(['trace-replay.mask_fields' => ['password']]);
+
+    $masker = app(PayloadMasker::class);
+
+    expect($masker->mask(['token' => 'visible'])['token'])->toBe('visible');
+
+    config(['trace-replay.mask_fields' => ['token']]);
+
+    expect($masker->mask(['token' => 'secret'])['token'])->toBe('********');
+});
+
 // ── AiPromptService ───────────────────────────────────────────────────────────
 
 it('AiPromptService generates a prompt for a failed trace', function () {
@@ -362,11 +376,28 @@ it('trace-replay:export filters by status', function () {
         ->assertExitCode(0);
 });
 
+it('trace-replay:doctor command runs diagnostics', function () {
+    $this->artisan('trace-replay:doctor')
+        ->expectsOutputToContain('TraceReplay diagnostics')
+        ->assertExitCode(0);
+});
+
 // ── Prune Command Extra ──────────────────────────────────────────────────────
 
 it('trace-replay:prune rejects zero days', function () {
     $this->artisan('trace-replay:prune', ['--days' => 0])
         ->assertExitCode(1);
+});
+
+it('trace-replay:prune is a no-op when retention_days is null and days is not passed', function () {
+    config(['trace-replay.retention_days' => null]);
+    Trace::factory()->create(['started_at' => now()->subDays(60)]);
+
+    $this->artisan('trace-replay:prune')
+        ->expectsOutput('Trace pruning is disabled because trace-replay.retention_days is null. Pass --days to override.')
+        ->assertExitCode(0);
+
+    expect(Trace::count())->toBe(1);
 });
 
 it('trace-replay:prune filters by status', function () {
@@ -445,6 +476,7 @@ it('dashboard show returns 404 for nonexistent trace', function () {
 it('dashboard stats endpoint returns JSON', function () {
     Trace::factory()->create(['status' => 'success', 'duration_ms' => 100]);
     Trace::factory()->create(['status' => 'error', 'duration_ms' => 200]);
+    Trace::factory()->create(['status' => 'error', 'duration_ms' => 500, 'started_at' => now()->subDays(40)]);
 
     $response = $this->withToken('test-token')->getJson('/trace-replay/stats');
 
@@ -522,6 +554,24 @@ it('MCP list traces filters by error', function () {
     $response->assertJsonPath('data.total', 1);
 });
 
+it('MCP list traces supports status and limit parameters', function () {
+    Trace::factory()->count(3)->create(['status' => 'success']);
+    Trace::factory()->count(2)->create(['status' => 'error']);
+
+    $response = $this->withToken('test-token')->getJson('/api/trace-replay/traces?status=success&limit=2');
+
+    $response->assertOk();
+    $response->assertJsonPath('data.per_page', 2);
+    $response->assertJsonPath('data.total', 3);
+});
+
+it('MCP list traces rejects invalid status parameters', function () {
+    $response = $this->withToken('test-token')->getJson('/api/trace-replay/traces?status=invalid');
+
+    $response->assertStatus(422);
+    $response->assertJsonPath('status', 'error');
+});
+
 it('MCP get context returns trace details', function () {
     $trace = Trace::factory()->create(['status' => 'success']);
 
@@ -530,6 +580,26 @@ it('MCP get context returns trace details', function () {
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
     $response->assertJsonStructure(['data' => ['trace', 'completion_percentage', 'total_duration', 'error_step']]);
+});
+
+it('MCP get context limits returned steps', function () {
+    config(['trace-replay.api.max_steps' => 5]);
+
+    $trace = Trace::factory()->create(['status' => 'success']);
+    foreach (range(1, 8) as $order) {
+        TraceStep::factory()->create([
+            'trace_id' => $trace->id,
+            'label' => "Step {$order}",
+            'step_order' => $order,
+        ]);
+    }
+
+    $response = $this->withToken('test-token')->getJson("/api/trace-replay/traces/{$trace->id}/context?step_limit=3");
+
+    $response->assertOk();
+    $response->assertJsonPath('data.step_limit', 3);
+    $response->assertJsonPath('data.steps_returned', 3);
+    $response->assertJsonCount(3, 'data.trace.steps');
 });
 
 it('MCP generate fix prompt returns prompt', function () {
@@ -562,6 +632,22 @@ it('MCP RPC list_traces method works', function () {
     $response->assertJsonPath('id', 1);
 });
 
+it('MCP RPC list_traces supports status and limit parameters', function () {
+    Trace::factory()->count(3)->create(['status' => 'success']);
+    Trace::factory()->count(2)->create(['status' => 'error']);
+
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
+        'method' => 'list_traces',
+        'params' => ['status' => 'error', 'limit' => 1],
+        'id' => 11,
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('jsonrpc', '2.0');
+    $response->assertJsonPath('result.per_page', 1);
+    $response->assertJsonPath('result.total', 2);
+});
+
 it('MCP RPC returns error for unknown method', function () {
     $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
         'method' => 'unknown_method',
@@ -586,6 +672,30 @@ it('MCP RPC get_trace_context method works', function () {
 
     $response->assertOk();
     $response->assertJsonPath('jsonrpc', '2.0');
+});
+
+it('MCP RPC get_trace_context caps step limits at the configured maximum', function () {
+    config(['trace-replay.api.max_steps' => 2]);
+
+    $trace = Trace::factory()->create(['status' => 'error']);
+    foreach (range(1, 4) as $order) {
+        TraceStep::factory()->create([
+            'trace_id' => $trace->id,
+            'label' => "Step {$order}",
+            'step_order' => $order,
+        ]);
+    }
+
+    $response = $this->withToken('test-token')->postJson('/api/trace-replay/mcp', [
+        'method' => 'get_trace_context',
+        'params' => ['trace_id' => $trace->id, 'step_limit' => 99],
+        'id' => 22,
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('result.step_limit', 2);
+    $response->assertJsonPath('result.steps_returned', 2);
+    $response->assertJsonCount(2, 'result.trace.steps');
 });
 
 it('MCP RPC generate_fix_prompt method works', function () {
@@ -764,6 +874,42 @@ it('context() resets after checkpoint consumes it', function () {
 
     expect($steps[0]->state_snapshot)->toMatchArray(['ctx' => 'data'])
         ->and($steps[1]->state_snapshot)->toBe([]);
+});
+
+it('masks sensitive values from manual step payloads and context before storing', function () {
+    TraceReplay::start('Manual Masking');
+    TraceReplay::context(['token' => 'secret-context-token']);
+
+    TraceReplay::step('Sensitive Manual Step', fn () => null, [
+        'request_payload' => ['password' => 'secret-password', 'safe' => 'visible'],
+        'response_payload' => ['api_key' => 'secret-api-key'],
+        'state_snapshot' => ['access_token' => 'secret-access-token'],
+    ]);
+
+    $step = TraceReplay::getCurrentTrace()->steps()->first();
+
+    expect($step->request_payload)->toMatchArray(['password' => '********', 'safe' => 'visible'])
+        ->and($step->response_payload)->toMatchArray(['api_key' => '********'])
+        ->and($step->state_snapshot)->toMatchArray([
+            'access_token' => '********',
+            'token' => '********',
+        ]);
+});
+
+it('masks sensitive values from checkpoint state before storing', function () {
+    TraceReplay::start('Checkpoint Masking');
+
+    TraceReplay::checkpoint('Sensitive Checkpoint', [
+        'authorization' => 'Bearer secret',
+        'safe' => 'visible',
+    ]);
+
+    $step = TraceReplay::getCurrentTrace()->steps()->first();
+
+    expect($step->state_snapshot)->toMatchArray([
+        'authorization' => '********',
+        'safe' => 'visible',
+    ]);
 });
 
 // ── TraceStep Model ──────────────────────────────────────────────────────────
@@ -953,6 +1099,17 @@ it('NotificationService skips slack when no webhook configured', function () {
     Http::assertNothingSent();
 });
 
+it('TraceReplayManager dispatches failure notifications after the response', function () {
+    Bus::fake();
+
+    config(['trace-replay.notifications.on_failure' => true]);
+
+    $trace = TraceReplay::start('Async Failure Notification');
+    TraceReplay::end('error');
+
+    Bus::assertDispatched(NotifyTraceFailureJob::class);
+});
+
 // ── Step DB query tracking ───────────────────────────────────────────────────
 
 it('step records db query count when tracking is enabled', function () {
@@ -1134,6 +1291,92 @@ it('ReplayService uses recorded host metadata when no base URL configured', func
         ->and($captured->header('X-TraceReplay-Skip'))->toBe(['1'])
         ->and($captured->header('X-TraceReplay-Origin-Trace'))->toBe([$trace->id])
         ->and($result['replay']['status'])->toBe(200);
+});
+
+it('ReplayService treats absolute payload URIs as paths on the replay base host', function () {
+    Http::fake(function (HttpRequest $request) use (&$captured) {
+        $captured = $request;
+
+        return Http::response(['ok' => true], 200);
+    });
+
+    config(['trace-replay.replay.default_base_url' => null]);
+
+    $trace = Trace::factory()->create();
+    TraceStep::factory()->create([
+        'trace_id' => $trace->id,
+        'label' => 'HTTP Request',
+        'request_payload' => [
+            'method' => 'GET',
+            'uri' => 'http://evil.test/internal?foo=1',
+            'host' => 'http://example.test',
+            'headers' => [],
+            'body' => [],
+            'query' => [],
+        ],
+        'response_payload' => ['status' => 200, 'body' => ['ok' => true]],
+    ]);
+
+    app(ReplayService::class)->replay($trace);
+
+    expect($captured->url())->toBe('http://example.test/internal?foo=1');
+});
+
+it('ReplayService blocks override hosts unless they are allowed', function () {
+    $trace = Trace::factory()->create();
+    TraceStep::factory()->create([
+        'trace_id' => $trace->id,
+        'label' => 'HTTP Request',
+        'request_payload' => [
+            'method' => 'GET',
+            'uri' => '/api/demo',
+            'host' => 'http://example.test',
+            'headers' => [],
+            'body' => [],
+            'query' => [],
+        ],
+        'response_payload' => ['status' => 200, 'body' => ['ok' => true]],
+    ]);
+
+    expect(fn () => app(ReplayService::class)->replay($trace, 'http://169.254.169.254'))
+        ->toThrow(Exception::class, 'Replay override host [169.254.169.254] is not allowed');
+});
+
+it('ReplayService strips sensitive headers from replay requests', function () {
+    Http::fake(function (HttpRequest $request) use (&$captured) {
+        $captured = $request;
+
+        return Http::response(['ok' => true], 200);
+    });
+
+    config(['trace-replay.replay.allowed_hosts' => ['target.test']]);
+
+    $trace = Trace::factory()->create();
+    TraceStep::factory()->create([
+        'trace_id' => $trace->id,
+        'label' => 'HTTP Request',
+        'request_payload' => [
+            'method' => 'GET',
+            'uri' => '/api/demo',
+            'host' => 'http://example.test',
+            'headers' => [
+                'Authorization' => ['Bearer secret'],
+                'X-CSRF-Token' => ['csrf'],
+                'X-Forwarded-For' => ['10.0.0.1'],
+                'Accept' => ['application/json'],
+            ],
+            'body' => [],
+            'query' => [],
+        ],
+        'response_payload' => ['status' => 200, 'body' => ['ok' => true]],
+    ]);
+
+    app(ReplayService::class)->replay($trace, 'http://target.test');
+
+    expect($captured->header('Authorization'))->toBe([])
+        ->and($captured->header('X-CSRF-Token'))->toBe([])
+        ->and($captured->header('X-Forwarded-For'))->toBe([])
+        ->and($captured->header('Accept'))->toBe(['application/json']);
 });
 
 it('dashboard replay endpoint returns error for trace without request payload', function () {
@@ -1453,6 +1696,7 @@ it('TraceReplayFake setWorkspaceId, setProjectId, setTraceParent are callable wi
     $fake->setProjectId('proj-1');
     $fake->setTraceParent('00-abc-01');
     $fake->captureResponseOnLastStep(['body' => 'ok'], 200);
+    $fake->captureException(new RuntimeException('fake boom'));
     $fake->recordEvent(new stdClass);
 
     expect(true)->toBeTrue(); // Reached without exception
@@ -1463,6 +1707,15 @@ it('TraceReplayFake getCurrentTrace returns null', function () {
     $fake->start('Some Trace');
 
     expect($fake->getCurrentTrace())->toBeNull();
+});
+
+it('TraceReplayFake start signature accepts type and forceSample like the real manager', function () {
+    $fake = TraceReplay::fake();
+
+    $trace = $fake->start('Queued Trace', ['queue' => 'default'], 'job', true);
+
+    expect($trace->type)->toBe('job');
+    $fake->assertTraceStarted('Queued Trace');
 });
 
 it('TraceReplayFake assertCheckpointRecorded passes when checkpoint exists', function () {
@@ -1527,6 +1780,21 @@ it('setWorkspaceId persists the workspace on new traces', function () {
     expect($trace->fresh()->workspace_id)->toBe($workspace->id)
         ->and($trace->fresh()->workspace)->not->toBeNull()
         ->and($trace->fresh()->workspace->name)->toBe('Scoped Workspace');
+});
+
+it('setWorkspaceId resets after a trace ends to avoid leaking across requests', function () {
+    $workspace = Workspace::create(['id' => Str::uuid(), 'name' => 'Scoped Workspace']);
+
+    TraceReplay::setWorkspaceId($workspace->id);
+
+    $firstTrace = TraceReplay::start('Workspace Scoped Trace');
+    TraceReplay::end();
+
+    $secondTrace = TraceReplay::start('Unscoped Trace');
+    TraceReplay::end();
+
+    expect($firstTrace->fresh()->workspace_id)->toBe($workspace->id)
+        ->and($secondTrace->fresh()->workspace_id)->toBeNull();
 });
 
 it('completion_percentage ignores checkpoints when locating the failed step', function () {
