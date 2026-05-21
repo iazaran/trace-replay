@@ -145,6 +145,7 @@
                     </li>
                     <li><a href="#mcp-api" class="block text-zinc-400 hover:text-white transition mt-4">MCP Agent API</a></li>
                     <li><a href="#retention" class="block text-zinc-400 hover:text-white transition">Data Retention</a></li>
+                    <li><a href="#diagnostics" class="block text-zinc-400 hover:text-white transition">Diagnostics</a></li>
                     <li><a href="#testing" class="block text-zinc-400 hover:text-white transition">Testing</a></li>
                 </ul>
             </div>
@@ -154,12 +155,14 @@
         <main class="prose max-w-3xl flex-grow" id="content-area">
 
             <h1 id="introduction" class="text-4xl">TraceReplay Documentation</h1>
-            <p class="text-xl text-zinc-300">High-fidelity process tracking, deterministic replay, and AI debugging for Laravel — production &amp; enterprise ready.</p>
+            <p class="text-xl text-zinc-300">Production-conscious step-level tracing, deterministic HTTP replay, and AI-ready debugging for Laravel.</p>
             <p>TraceReplay is not a standard error logger. It is a full-fledged <strong>execution tracer</strong> that captures every step of your complex workflows, reconstructs them with a waterfall timeline, and offers one-click AI debugging when things go wrong. It supports Laravel 10, 11, 12, and 13.</p>
 
             <h2 id="installation">Installation</h2>
             <pre><code class="language-bash">composer require iazaran/trace-replay</code></pre>
-            <p>Publish the config:</p>
+            <p>Run the installer:</p>
+            <pre><code class="language-bash">php artisan trace-replay:install</code></pre>
+            <p>Or publish the config manually:</p>
             <pre><code class="language-bash">php artisan vendor:publish --tag=trace-replay-config</code></pre>
             <p>Run migrations:</p>
             <pre><code class="language-bash">php artisan migrate</code></pre>
@@ -196,8 +199,14 @@
     'mask_fields'      => ['password', 'password_confirmation', 'token', 'api_key',
                            'authorization', 'secret', 'credit_card', 'cvv', 'ssn', 'private_key'],
     'track_db_queries' => env('TRACE_REPLAY_TRACK_DB', true),
-    'middleware'        => ['web'],           // add 'auth', 'can:...' for production
-    'api_middleware'    => ['api'],
+    'middleware'        => ['web', 'auth'],   // add 'can:view-trace-replay' for production
+    'route_prefix'      => env('TRACE_REPLAY_ROUTE_PREFIX', 'trace-replay'),
+    'api' => [
+        'token'      => env('TRACE_REPLAY_API_TOKEN'), // API disabled until set
+        'middleware' => ['api'],
+        'route_prefix' => env('TRACE_REPLAY_API_ROUTE_PREFIX', 'api/trace-replay'),
+        'max_steps' => env('TRACE_REPLAY_API_MAX_STEPS', 500),
+    ],
     'allowed_ips'      => array_filter(explode(',', env('TRACE_REPLAY_ALLOWED_IPS', ''))),
     'queue' => [
         'enabled'    => env('TRACE_REPLAY_QUEUE_ENABLED', false),
@@ -207,6 +216,8 @@
     'replay' => [
         'default_base_url' => env('TRACE_REPLAY_REPLAY_URL', env('APP_URL')),
         'timeout'          => env('TRACE_REPLAY_REPLAY_TIMEOUT', 30),
+        'allow_mutating_methods' => env('TRACE_REPLAY_REPLAY_MUTATING', false),
+        'allowed_hosts' => array_filter(explode(',', env('TRACE_REPLAY_REPLAY_ALLOWED_HOSTS', ''))),
     ],
     'retention_days' => env('TRACE_REPLAY_RETENTION_DAYS', 30),
     'notifications' => [
@@ -219,15 +230,18 @@
         'driver'  => env('TRACE_REPLAY_AI_DRIVER', 'openai'), // openai | anthropic | ollama
         'api_key' => env('TRACE_REPLAY_AI_KEY'),
         'model'   => env('TRACE_REPLAY_AI_MODEL', 'gpt-4o'),
+        'base_url' => env('TRACE_REPLAY_AI_BASE_URL'),
     ],
     'auto_trace' => [
         'jobs'     => env('TRACE_REPLAY_AUTO_TRACE_JOBS', true),
         'commands' => env('TRACE_REPLAY_AUTO_TRACE_COMMANDS', false),
         'livewire' => env('TRACE_REPLAY_AUTO_TRACE_LIVEWIRE', true),
+        'capture_job_payload' => env('TRACE_REPLAY_CAPTURE_JOB_PAYLOAD', false),
         'exclude_commands' => ['queue:work', 'queue:listen', 'horizon', 'schedule:run',
                                'schedule:work', 'trace-replay:prune', 'trace-replay:export'],
     ],
 ];</code></pre>
+            <p>Laravel 11+ applications do not always define an <code>api</code> middleware group. If your app does not, set <code>trace-replay.api.middleware</code> to middleware that exists in your project, such as <code>['throttle:api']</code>.</p>
 
             <h2 id="manual-tracing">Manual Tracing</h2>
             <p>Wrap any complex logic in <code>TraceReplay::step()</code>. Each callback's return value is passed through transparently.</p>
@@ -337,6 +351,13 @@ Gate::define('view-trace-replay', fn ($user) =>
             <p>Or restrict by IP (exact match, comma-separated via env):</p>
             <pre><code class="language-bash">TRACE_REPLAY_ALLOWED_IPS=203.0.113.5,10.0.0.1</code></pre>
 
+            <h2 id="replay-safety">Replay Safety</h2>
+            <p>HTTP replay is conservative by default: non-GET methods are blocked, <code>override_url</code> can only target the originally recorded host, and sensitive headers such as <code>Authorization</code>, cookies, CSRF tokens, and forwarded headers are stripped before replay.</p>
+            <pre><code class="language-bash">TRACE_REPLAY_REPLAY_ALLOWED_HOSTS=staging.example.com,*.internal.test</code></pre>
+
+            <h2 id="failure-notifications">Failure Notifications</h2>
+            <p>When <code>trace-replay.notifications.on_failure</code> is enabled, mail and Slack notifications are dispatched through a queued job after the response so slow webhooks do not add latency to failed requests.</p>
+
             <h2 id="data-masking">Data Masking</h2>
             <p>TraceReplay automatically redacts configured keys from all request/response payloads <em>before</em> they touch the database — including deeply nested values:</p>
             <pre><code class="language-php">// config/trace-replay.php
@@ -380,11 +401,12 @@ TRACE_REPLAY_AI_BASE_URL=http://localhost:11434/api/generate</code></pre>
 
             <h2 id="mcp-api">MCP / AI-Agent JSON-RPC API</h2>
             <p>Autonomous agents can query TraceReplay over JSON-RPC 2.0 at <code>POST /api/trace-replay/mcp</code>.</p>
+            <p>The API is disabled until <code>TRACE_REPLAY_API_TOKEN</code> is configured. Send requests with an <code>Authorization: Bearer your-token</code> header.</p>
             <table>
                 <thead><tr><th>Method</th><th>Params</th><th>Returns</th></tr></thead>
                 <tbody>
-                    <tr><td><code>list_traces</code></td><td><code>limit</code>, <code>status</code></td><td>Array of trace summaries</td></tr>
-                    <tr><td><code>get_trace_context</code></td><td><code>trace_id</code></td><td>Full trace with steps</td></tr>
+                    <tr><td><code>list_traces</code></td><td><code>limit</code>, <code>status</code>, <code>filter_by_error</code></td><td>Paginated trace summaries</td></tr>
+                    <tr><td><code>get_trace_context</code></td><td><code>trace_id</code>, <code>step_limit</code></td><td>Trace context with capped steps</td></tr>
                     <tr><td><code>generate_fix_prompt</code></td><td><code>trace_id</code></td><td>Markdown debugging prompt</td></tr>
                     <tr><td><code>trigger_replay</code></td><td><code>trace_id</code></td><td>Replay result + JSON diff</td></tr>
                 </tbody>
@@ -395,6 +417,7 @@ TRACE_REPLAY_AI_BASE_URL=http://localhost:11434/api/generate</code></pre>
   "params": { "trace_id": "9b12f7e4-..." },
   "id": 1
 }</code></pre>
+            <p><code>step_limit</code> defaults to <code>trace-replay.api.max_steps</code> (<code>500</code>) and is capped at that value to avoid oversized responses.</p>
 
             <h2 id="retention">Data Retention</h2>
             <p>Prune old traces automatically via the scheduler:</p>
@@ -402,15 +425,21 @@ TRACE_REPLAY_AI_BASE_URL=http://localhost:11434/api/generate</code></pre>
 $schedule->command('trace-replay:prune --days=30')->daily();</code></pre>
             <pre><code class="language-bash">php artisan trace-replay:prune --days=30 --dry-run       # preview
 php artisan trace-replay:prune --days=7 --status=error    # prune only error traces</code></pre>
+            <p>Set <code>TRACE_REPLAY_RETENTION_DAYS</code> to choose the default window. If <code>retention_days</code> is <code>null</code>, pruning is a no-op unless <code>--days</code> is passed.</p>
             <p>Export a trace for archiving:</p>
             <pre><code class="language-bash">php artisan trace-replay:export {id} --format=json
 php artisan trace-replay:export {id} --format=csv
 php artisan trace-replay:export {id} --format=json --output=/tmp/trace.json
 php artisan trace-replay:export --status=error --format=json  # all error traces</code></pre>
 
+            <h2 id="diagnostics">Diagnostics</h2>
+            <pre><code class="language-bash">php artisan trace-replay:doctor</code></pre>
+            <p>The doctor command reports dashboard protection, API token status, sample rate, retention, replay safety, query binding capture, and whether the trace tables exist.</p>
+
             <h2 id="testing">Testing</h2>
-            <pre><code class="language-bash">./vendor/bin/pest</code></pre>
-            <p>The test suite (110 tests, 225 assertions) covers the full engine lifecycle, model scopes &amp; accessors, payload masking (PII, case-insensitive), AI prompt &amp; notification services, dashboard UI with date range filters, MCP JSON-RPC API, middleware (trace &amp; auth), replay engine, log call tracking, <code>TraceReplayFake</code> assertions, Artisan commands (prune &amp; export with validation), queue persistence, and Blade components — all using an in-memory SQLite database.</p>
+            <pre><code class="language-bash">composer test
+composer format:test</code></pre>
+            <p>The test suite covers the full engine lifecycle, model scopes &amp; accessors, payload masking (PII, case-insensitive), AI prompt &amp; notification services, dashboard UI with date range filters, MCP JSON-RPC API, middleware (trace &amp; auth), replay engine, log call tracking, <code>TraceReplayFake</code> assertions, Artisan commands (doctor, prune &amp; export with validation), queue persistence, and Blade components — all using an in-memory SQLite database.</p>
 
             <hr class="my-12 border-zinc-800">
             <p class="text-sm text-center text-zinc-500">TraceReplay &copy; 2026 &mdash; MIT License</p>

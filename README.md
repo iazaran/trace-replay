@@ -1,16 +1,25 @@
 # TraceReplay
 
-> **High-fidelity process tracking, deterministic replay, and AI-powered debugging for Laravel — production & enterprise ready.**
+> **Production-conscious step-level tracing, deterministic HTTP replay, and AI-ready debugging for Laravel.**
 
 [![Latest Version](https://img.shields.io/packagist/v/iazaran/trace-replay)](https://packagist.org/packages/iazaran/trace-replay)
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
 [![Laravel](https://img.shields.io/badge/Laravel-10%20|%2011%20|%2012%20|%2013-red)](https://laravel.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-110%20passing-brightgreen)](#testing)
+[![Tests](https://github.com/iazaran/trace-replay/actions/workflows/test.yml/badge.svg)](https://github.com/iazaran/trace-replay/actions/workflows/test.yml)
+[![Code Analysis](https://github.com/iazaran/trace-replay/actions/workflows/code-analysis.yml/badge.svg)](https://github.com/iazaran/trace-replay/actions/workflows/code-analysis.yml)
 
 TraceReplay is not a standard error logger. It is a full-fledged **execution tracer** that captures every step of your complex workflows, reconstructs them with a waterfall timeline, and offers one-click AI debugging when things go wrong.
 
 ![TraceReplay](art/preview.png)
+
+---
+
+## Why TraceReplay?
+
+- **See business workflows as steps**, not just requests, queries, and exceptions scattered across separate tools.
+- **Replay captured HTTP requests safely** with mutating methods blocked by default and JSON diffs for response changes.
+- **Debug failures with AI-ready context** while masking sensitive fields before payloads are stored.
 
 ---
 
@@ -47,7 +56,14 @@ TraceReplay is not a standard error logger. It is a full-fledged **execution tra
 composer require iazaran/trace-replay
 ```
 
-Publish the config:
+Quick install:
+
+```bash
+php artisan trace-replay:install
+php artisan migrate
+```
+
+Or publish the config manually:
 
 ```bash
 php artisan vendor:publish --tag=trace-replay-config
@@ -61,7 +77,7 @@ php artisan migrate
 
 > **Note:** Migrations run automatically without publishing. They use `json` columns and `decimal` precision for timings, compatible with MySQL 5.7+, MariaDB, PostgreSQL, and SQLite.
 >
-> ⚠️ **Important When Updating:** Package migrations do not execute automatically upon `composer update`. Whenever you update TraceReplay to a newer version, you must run `php artisan migrate` to ensure any newly introduced schema changes are applied.
+> ⚠️ **Important When Updating:** Package migrations do not execute automatically upon `composer update`. Whenever you update TraceReplay to a newer version, you must run `php artisan migrate` to ensure any newly introduced schema changes are applied. Review [`UPGRADE.md`](UPGRADE.md) for behavioral changes between versions, especially around replay safety, job payload capture, and workspace ID scoping.
 
 #### Publishing Views
 
@@ -112,20 +128,39 @@ return [
     // Disable on low-cost production servers if query-log overhead is too high
     'track_db_queries' => env('TRACE_REPLAY_TRACK_DB', true),
 
+    // Truncate captured JSON fields after 64 KB by default
+    'max_payload_size' => env('TRACE_REPLAY_MAX_PAYLOAD_SIZE', 65536),
+
     // Automatically mask these keys in payloads, headers, and URL query strings
     'mask_fields' => ['password', 'token', 'api_key', 'authorization', 'cookie', 'secret'],
 
     // Query bindings can contain PII; keep disabled in production unless needed
     'track_db_query_bindings' => env('TRACE_REPLAY_TRACK_DB_BINDINGS', false),
 
-    // Dashbord security: only users passing the "view-trace-replay" gate can access
+    // Dashboard security: add a Gate for tighter production access
     'middleware' => ['web', 'auth'],
+    'route_prefix' => env('TRACE_REPLAY_ROUTE_PREFIX', 'trace-replay'),
+
+    // Replay safety: mutating methods are blocked and override hosts are restricted
+    'replay' => [
+        'allow_mutating_methods' => env('TRACE_REPLAY_REPLAY_MUTATING', false),
+        'allowed_hosts' => array_filter(explode(',', env('TRACE_REPLAY_REPLAY_ALLOWED_HOSTS', ''))),
+    ],
+
+    // Agent/MCP API is disabled until this token is set
+    'api' => [
+        'token' => env('TRACE_REPLAY_API_TOKEN'),
+        'middleware' => ['api'],
+        'route_prefix' => env('TRACE_REPLAY_API_ROUTE_PREFIX', 'api/trace-replay'),
+        'max_steps' => env('TRACE_REPLAY_API_MAX_STEPS', 500),
+    ],
 
     // AI Troubleshooting (Drivers: openai, anthropic, ollama)
     'ai' => [
         'driver' => env('TRACE_REPLAY_AI_DRIVER', 'openai'),
         'api_key' => env('TRACE_REPLAY_AI_KEY'),
         'model' => env('TRACE_REPLAY_AI_MODEL', 'gpt-4o'),
+        'base_url' => env('TRACE_REPLAY_AI_BASE_URL'),
     ],
 
     // Async batch persistence via queue (Reduces overhead)
@@ -138,6 +173,7 @@ return [
         'jobs'     => true,
         'commands' => false,
         'livewire' => true,
+        'capture_job_payload' => false,
     ],
 ];
 ```
@@ -150,6 +186,10 @@ TRACE_REPLAY_SAMPLE_RATE=0.05
 TRACE_REPLAY_TRACK_DB=false
 TRACE_REPLAY_MAX_PAYLOAD_SIZE=16384
 ```
+
+Laravel 11+ applications do not always define an `api` middleware group. If your
+app does not, replace `trace-replay.api.middleware` with middleware that exists
+in your project, such as `['throttle:api']`.
 
 ---
 
@@ -249,6 +289,12 @@ Queue jobs are automatically traced when `auto_trace.jobs` is enabled (default: 
 
 To disable, set `TRACE_REPLAY_AUTO_TRACE_JOBS=false` in your `.env`.
 
+Job payloads are not captured by default because queue payloads often contain sensitive application data. To opt in:
+
+```env
+TRACE_REPLAY_CAPTURE_JOB_PAYLOAD=true
+```
+
 ---
 
 ### Auto Artisan-Command Tracing
@@ -318,6 +364,23 @@ TRACE_REPLAY_ALLOWED_IPS=203.0.113.5,10.0.0.1
 
 ---
 
+### Replay Safety
+
+HTTP replay is intentionally conservative:
+
+- Non-GET methods are blocked unless `TRACE_REPLAY_REPLAY_MUTATING=true`.
+- `override_url` can only target the originally recorded host by default.
+- Set `TRACE_REPLAY_REPLAY_ALLOWED_HOSTS=staging.example.com,*.internal.test` to allow explicit replay targets.
+- Sensitive request headers such as `Authorization`, cookies, CSRF tokens, and forwarded headers are stripped before replay.
+
+---
+
+### Failure Notifications
+
+When `trace-replay.notifications.on_failure` is enabled, mail/Slack notifications are dispatched through a queued job after the response so slow webhooks do not add latency to failed requests.
+
+---
+
 ## 🤖 AI Debugging
 
 For any failed trace the dashboard shows an **AI Fix Prompt** button that generates a structured markdown prompt including:
@@ -360,12 +423,18 @@ With a key configured, clicking **"Ask AI"** sends the prompt to your chosen AI 
 
 TraceReplay exposes a JSON-RPC 2.0 endpoint at `POST /api/trace-replay/mcp` for autonomous AI agents.
 
+The API is disabled until `TRACE_REPLAY_API_TOKEN` is configured. Send requests with:
+
+```http
+Authorization: Bearer your-token
+```
+
 **Available methods:**
 
 | Method | Params | Returns |
 |---|---|---|
-| `list_traces` | `limit`, `status` | Array of trace summaries |
-| `get_trace_context` | `trace_id` | Full trace with steps |
+| `list_traces` | `limit`, `status`, `filter_by_error` | Paginated trace summaries |
+| `get_trace_context` | `trace_id`, `step_limit` | Trace context with capped steps |
 | `generate_fix_prompt` | `trace_id` | Markdown debugging prompt |
 | `trigger_replay` | `trace_id` | Replay result + JSON diff |
 
@@ -379,6 +448,9 @@ Example request:
   "id": 1
 }
 ```
+
+`step_limit` defaults to `trace-replay.api.max_steps` (`500`) and is capped at
+that value to keep large traces from producing oversized API responses.
 
 ---
 
@@ -399,6 +471,20 @@ php artisan trace-replay:prune --days=30 --dry-run      # Preview what would be 
 php artisan trace-replay:prune --days=7 --status=error  # Only prune error traces
 ```
 
+Set `TRACE_REPLAY_RETENTION_DAYS` to choose the default window. If `retention_days` is `null`, the prune command exits without deleting data unless `--days` is passed.
+
+---
+
+## 🩺 Diagnostics
+
+Check production-readiness settings with:
+
+```bash
+php artisan trace-replay:doctor
+```
+
+The command reports dashboard protection, API token status, sample rate, retention, replay safety, query binding capture, and whether the trace tables exist.
+
 ---
 
 ## 📤 Export
@@ -418,10 +504,11 @@ php artisan trace-replay:export --status=error --format=json  # Export all error
 
 ```bash
 composer install
-./vendor/bin/pest
+composer test
+composer format:test
 ```
 
-110 tests, 225 assertions. The test suite covers:
+The test suite covers:
 - Trace lifecycle (start, step, checkpoint, context, end, duration precision)
 - Error capturing, step ordering, DB query tracking
 - Model scopes (`failed`, `successful`, `search`)
