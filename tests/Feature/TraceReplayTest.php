@@ -1160,6 +1160,28 @@ it('step query tracking restores the query log state after the step finishes', f
         ->and($connection->getQueryLog())->toBe([]);
 });
 
+it('step executes the callback when query tracking cannot resolve a connection', function () {
+    config(['trace-replay.track_db_queries' => true]);
+
+    TraceReplay::start('Unavailable Query Collector');
+    config(['database.default' => 'missing']);
+
+    try {
+        $result = TraceReplay::step('Application Work', function () {
+            config(['database.default' => 'testbench']);
+
+            return 'completed';
+        });
+    } finally {
+        config(['database.default' => 'testbench']);
+    }
+
+    $step = TraceReplay::getCurrentTrace()->steps()->first();
+
+    expect($result)->toBe('completed')
+        ->and($step->db_query_count)->toBe(0);
+});
+
 it('step does not track queries when disabled', function () {
     config(['trace-replay.track_db_queries' => false]);
 
@@ -1627,6 +1649,35 @@ it('step records repeated HTTP calls to the same endpoint independently', functi
         ->and($step->http_calls[1]['status'])->toBe(201)
         ->and(urldecode($step->http_calls[0]['url']))->toContain('access_token=********')
         ->and($step->http_calls[0]['url'])->not->toContain('secret-token');
+});
+
+it('step preserves application behavior when an event collector fails', function () {
+    app()->instance(PayloadMasker::class, new class extends PayloadMasker
+    {
+        public function mask(mixed $data): mixed
+        {
+            throw new RuntimeException('Mask collector unavailable');
+        }
+
+        public function maskUrl(?string $url): ?string
+        {
+            throw new RuntimeException('URL collector unavailable');
+        }
+    });
+
+    TraceReplay::start('Collector Failure');
+    TraceReplay::checkpoint('Unavailable Collector');
+
+    $result = TraceReplay::step('Application Work', function () {
+        $request = new HttpRequest(new PsrRequest('GET', 'https://example.test/users'));
+        app('trace-replay')->recordEvent(new RequestSending($request));
+
+        return 'completed';
+    });
+
+    expect($result)->toBe('completed')
+        ->and(fn () => TraceReplay::step('Failing Work', fn () => throw new LogicException('Application failure')))
+        ->toThrow(LogicException::class, 'Application failure');
 });
 
 it('step stores null for log_calls when no log messages are emitted', function () {

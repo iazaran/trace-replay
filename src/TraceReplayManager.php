@@ -61,6 +61,8 @@ class TraceReplayManager
      */
     protected int $traceDepth = 0;
 
+    protected bool $handlingInternalError = false;
+
     public function __construct($app)
     {
         $this->app = $app;
@@ -162,15 +164,31 @@ class TraceReplayManager
         // multiple times (once per registered listener).
         $dbQueriesBefore = 0;
         if ($trackDb) {
-            $connection = DB::connection();
-            $ownsQueryLog = ! $connection->logging();
+            try {
+                $connection = DB::connection();
+                $ownsQueryLog = ! $connection->logging();
 
-            if ($ownsQueryLog) {
-                $connection->flushQueryLog();
-                $connection->enableQueryLog();
+                if ($ownsQueryLog) {
+                    $connection->flushQueryLog();
+                    $connection->enableQueryLog();
+                }
+
+                $dbQueriesBefore = count($connection->getQueryLog());
+            } catch (Throwable $e) {
+                if ($connection && $ownsQueryLog) {
+                    try {
+                        $connection->flushQueryLog();
+                        $connection->disableQueryLog();
+                    } catch (Throwable $cleanupError) {
+                        $this->handleInternalError($cleanupError);
+                    }
+                }
+
+                $trackDb = false;
+                $connection = null;
+                $ownsQueryLog = false;
+                $this->handleInternalError($e);
             }
-
-            $dbQueriesBefore = count($connection->getQueryLog());
         }
 
         // Push a new frame onto the stack to collect events for this step and its children
@@ -196,70 +214,80 @@ class TraceReplayManager
             ];
             throw $e;
         } finally {
-            $frame = array_pop($this->stepStack);
-            $durationMs = round((microtime(true) - $start) * 1000, 2);
-            $memDelta = memory_get_usage(true) - $memBefore;
+            try {
+                $frame = array_pop($this->stepStack);
+                $durationMs = round((microtime(true) - $start) * 1000, 2);
+                $memDelta = memory_get_usage(true) - $memBefore;
 
-            // Guard: $frame may be null if stepStack was corrupted by a previous exception
-            if ($frame === null) {
-                $frame = [
-                    'db_queries_before' => 0,
-                    'cache_calls' => [],
-                    'cache_hit_count' => 0,
-                    'cache_miss_count' => 0,
-                    'http_calls' => [],
-                    'mail_calls' => [],
-                    'log_calls' => [],
+                // Guard: $frame may be null if stepStack was corrupted by a previous exception
+                if ($frame === null) {
+                    $frame = [
+                        'db_queries_before' => 0,
+                        'cache_calls' => [],
+                        'cache_hit_count' => 0,
+                        'cache_miss_count' => 0,
+                        'http_calls' => [],
+                        'mail_calls' => [],
+                        'log_calls' => [],
+                    ];
+                }
+
+                $queryCount = 0;
+                $queryTimeMs = 0.0;
+                $queries = [];
+                if ($trackDb && $connection) {
+                    $queries = array_slice($connection->getQueryLog(), (int) $frame['db_queries_before']);
+                    $queries = $this->sanitizeQueries($queries);
+                    $queryCount = \count($queries);
+                    $queryTimeMs = round(array_sum(array_column($queries, 'time')), 2);
+                }
+
+                $this->stepCounter++;
+
+                $stepData = [
+                    'trace_id' => $this->currentTrace->id,
+                    'label' => $label,
+                    'type' => $extra['type'] ?? 'step',
+                    'status' => $status,
+                    'duration_ms' => $durationMs,
+                    'memory_usage' => max(0, $memDelta),
+                    'db_query_count' => $queryCount,
+                    'db_queries' => $queryCount > 0 ? $queries : null,
+                    'db_query_time_ms' => $queryTimeMs,
+                    'cache_calls' => count($frame['cache_calls']) > 0 ? $frame['cache_calls'] : null,
+                    'cache_hit_count' => $frame['cache_hit_count'],
+                    'cache_miss_count' => $frame['cache_miss_count'],
+                    'http_calls' => count($frame['http_calls']) > 0 ? array_values($frame['http_calls']) : null,
+                    'mail_calls' => count($frame['mail_calls']) > 0 ? $frame['mail_calls'] : null,
+                    'log_calls' => count($frame['log_calls']) > 0 ? $frame['log_calls'] : null,
+                    'error_reason' => $errorReason,
+                    'step_order' => $this->stepCounter,
+                    'request_payload' => $extra['request_payload'] ?? null,
+                    'response_payload' => $extra['response_payload'] ?? null,
+                    'state_snapshot' => [
+                        ...($extra['state_snapshot'] ?? []),
+                        ...$this->pendingContext,
+                    ],
                 ];
-            }
 
-            $queryCount = 0;
-            $queryTimeMs = 0.0;
-            $queries = [];
-            if ($trackDb && $connection) {
-                $queries = array_slice($connection->getQueryLog(), (int) $frame['db_queries_before']);
-                $queries = $this->sanitizeQueries($queries);
-                $queryCount = \count($queries);
-                $queryTimeMs = round(array_sum(array_column($queries, 'time')), 2);
-            }
+                $this->pendingContext = [];
 
-            $this->stepCounter++;
+                $step = new TraceStep($stepData);
+                $this->lastStep = $step;
+                $this->persistStep($step);
+            } catch (Throwable $e) {
+                $this->handleInternalError($e);
+            } finally {
+                $this->pendingContext = [];
 
-            $stepData = [
-                'trace_id' => $this->currentTrace->id,
-                'label' => $label,
-                'type' => $extra['type'] ?? 'step',
-                'status' => $status,
-                'duration_ms' => $durationMs,
-                'memory_usage' => max(0, $memDelta),
-                'db_query_count' => $queryCount,
-                'db_queries' => $queryCount > 0 ? $queries : null,
-                'db_query_time_ms' => $queryTimeMs,
-                'cache_calls' => count($frame['cache_calls']) > 0 ? $frame['cache_calls'] : null,
-                'cache_hit_count' => $frame['cache_hit_count'],
-                'cache_miss_count' => $frame['cache_miss_count'],
-                'http_calls' => count($frame['http_calls']) > 0 ? array_values($frame['http_calls']) : null,
-                'mail_calls' => count($frame['mail_calls']) > 0 ? $frame['mail_calls'] : null,
-                'log_calls' => count($frame['log_calls']) > 0 ? $frame['log_calls'] : null,
-                'error_reason' => $errorReason,
-                'step_order' => $this->stepCounter,
-                'request_payload' => $extra['request_payload'] ?? null,
-                'response_payload' => $extra['response_payload'] ?? null,
-                'state_snapshot' => [
-                    ...($extra['state_snapshot'] ?? []),
-                    ...$this->pendingContext,
-                ],
-            ];
-
-            $this->pendingContext = [];
-
-            $step = new TraceStep($stepData);
-            $this->lastStep = $step;
-            $this->persistStep($step);
-
-            if ($trackDb && $connection && $ownsQueryLog) {
-                $connection->flushQueryLog();
-                $connection->disableQueryLog();
+                if ($trackDb && $connection && $ownsQueryLog) {
+                    try {
+                        $connection->flushQueryLog();
+                        $connection->disableQueryLog();
+                    } catch (Throwable $e) {
+                        $this->handleInternalError($e);
+                    }
+                }
             }
         }
     }
@@ -281,26 +309,31 @@ class TraceReplayManager
             return;
         }
 
-        $this->stepCounter++;
+        try {
+            $this->stepCounter++;
 
-        $step = new TraceStep([
-            'trace_id' => $this->currentTrace->id,
-            'label' => $label,
-            'type' => 'checkpoint',
-            'status' => 'checkpoint',
-            'step_order' => $this->stepCounter,
-            'duration_ms' => 0,
-            'memory_usage' => 0,
-            'db_query_count' => 0,
-            'db_query_time_ms' => 0,
-            'cache_hit_count' => 0,
-            'cache_miss_count' => 0,
-            'state_snapshot' => [...$state, ...$this->pendingContext],
-        ]);
+            $step = new TraceStep([
+                'trace_id' => $this->currentTrace->id,
+                'label' => $label,
+                'type' => 'checkpoint',
+                'status' => 'checkpoint',
+                'step_order' => $this->stepCounter,
+                'duration_ms' => 0,
+                'memory_usage' => 0,
+                'db_query_count' => 0,
+                'db_query_time_ms' => 0,
+                'cache_hit_count' => 0,
+                'cache_miss_count' => 0,
+                'state_snapshot' => [...$state, ...$this->pendingContext],
+            ]);
 
-        $this->pendingContext = [];
-        $this->lastStep = $step;
-        $this->persistStep($step);
+            $this->pendingContext = [];
+            $this->lastStep = $step;
+            $this->persistStep($step);
+        } catch (Throwable $e) {
+            $this->pendingContext = [];
+            $this->handleInternalError($e);
+        }
     }
 
     /**
@@ -465,67 +498,71 @@ class TraceReplayManager
             return;
         }
 
-        // Add to all active steps (nested steps)
-        foreach ($this->stepStack as &$frame) {
-            $type = class_basename($event);
+        try {
+            // Add to all active steps (nested steps)
+            foreach ($this->stepStack as &$frame) {
+                $type = class_basename($event);
 
-            if ($event instanceof CacheHit) {
-                $frame['cache_hit_count']++;
-                $frame['cache_calls'][] = ['type' => 'Hit', 'key' => $event->key, 'time' => microtime(true)];
-            } elseif ($event instanceof CacheMissed) {
-                $frame['cache_miss_count']++;
-                $frame['cache_calls'][] = ['type' => 'Miss', 'key' => $event->key, 'time' => microtime(true)];
-            } elseif ($event instanceof KeyWritten || $event instanceof KeyForgotten) {
-                $frame['cache_calls'][] = ['type' => $type, 'key' => $event->key, 'time' => microtime(true)];
-            } elseif ($event instanceof HttpRequestSending) {
-                $frame['http_calls'][] = [
-                    'url' => $this->masker()->maskUrl($event->request->url()),
-                    'method' => $event->request->method(),
-                    'start' => microtime(true),
-                ];
-            } elseif ($event instanceof HttpResponseReceived) {
-                $url = $this->masker()->maskUrl($event->request->url());
+                if ($event instanceof CacheHit) {
+                    $frame['cache_hit_count']++;
+                    $frame['cache_calls'][] = ['type' => 'Hit', 'key' => $event->key, 'time' => microtime(true)];
+                } elseif ($event instanceof CacheMissed) {
+                    $frame['cache_miss_count']++;
+                    $frame['cache_calls'][] = ['type' => 'Miss', 'key' => $event->key, 'time' => microtime(true)];
+                } elseif ($event instanceof KeyWritten || $event instanceof KeyForgotten) {
+                    $frame['cache_calls'][] = ['type' => $type, 'key' => $event->key, 'time' => microtime(true)];
+                } elseif ($event instanceof HttpRequestSending) {
+                    $frame['http_calls'][] = [
+                        'url' => $this->masker()->maskUrl($event->request->url()),
+                        'method' => $event->request->method(),
+                        'start' => microtime(true),
+                    ];
+                } elseif ($event instanceof HttpResponseReceived) {
+                    $url = $this->masker()->maskUrl($event->request->url());
 
-                for ($index = count($frame['http_calls']) - 1; $index >= 0; $index--) {
-                    if (
-                        ($frame['http_calls'][$index]['url'] ?? null) === $url
-                        && ($frame['http_calls'][$index]['method'] ?? null) === $event->request->method()
-                        && ! array_key_exists('status', $frame['http_calls'][$index])
-                    ) {
-                        $frame['http_calls'][$index]['status'] = $event->response->status();
-                        $frame['http_calls'][$index]['duration'] = round((microtime(true) - $frame['http_calls'][$index]['start']) * 1000, 2);
-                        break;
+                    for ($index = count($frame['http_calls']) - 1; $index >= 0; $index--) {
+                        if (
+                            ($frame['http_calls'][$index]['url'] ?? null) === $url
+                            && ($frame['http_calls'][$index]['method'] ?? null) === $event->request->method()
+                            && ! array_key_exists('status', $frame['http_calls'][$index])
+                        ) {
+                            $frame['http_calls'][$index]['status'] = $event->response->status();
+                            $frame['http_calls'][$index]['duration'] = round((microtime(true) - $frame['http_calls'][$index]['start']) * 1000, 2);
+                            break;
+                        }
                     }
+                } elseif ($event instanceof MessageSending) {
+                    $frame['mail_calls'][] = [
+                        'type' => $type,
+                        'subject' => $event->message->getSubject(),
+                        'to' => array_map(
+                            static fn ($address) => method_exists($address, 'getAddress') ? $address->getAddress() : (string) $address,
+                            $event->message->getTo() ?? []
+                        ),
+                        'time' => microtime(true),
+                    ];
+                } elseif ($event instanceof NotificationSending) {
+                    $frame['mail_calls'][] = [
+                        'type' => $type,
+                        'notification' => \get_class($event->notification),
+                        'channel' => $event->channel,
+                        'notifiable_type' => is_object($event->notifiable) ? \get_class($event->notifiable) : gettype($event->notifiable),
+                        'notifiable_id' => is_object($event->notifiable) && method_exists($event->notifiable, 'getKey')
+                            ? $event->notifiable->getKey()
+                            : null,
+                        'time' => microtime(true),
+                    ];
+                } elseif ($event instanceof MessageLogged) {
+                    $frame['log_calls'][] = [
+                        'level' => $event->level,
+                        'message' => $event->message,
+                        'context' => $this->masker()->mask($event->context),
+                        'time' => microtime(true),
+                    ];
                 }
-            } elseif ($event instanceof MessageSending) {
-                $frame['mail_calls'][] = [
-                    'type' => $type,
-                    'subject' => $event->message->getSubject(),
-                    'to' => array_map(
-                        static fn ($address) => method_exists($address, 'getAddress') ? $address->getAddress() : (string) $address,
-                        $event->message->getTo() ?? []
-                    ),
-                    'time' => microtime(true),
-                ];
-            } elseif ($event instanceof NotificationSending) {
-                $frame['mail_calls'][] = [
-                    'type' => $type,
-                    'notification' => \get_class($event->notification),
-                    'channel' => $event->channel,
-                    'notifiable_type' => is_object($event->notifiable) ? \get_class($event->notifiable) : gettype($event->notifiable),
-                    'notifiable_id' => is_object($event->notifiable) && method_exists($event->notifiable, 'getKey')
-                        ? $event->notifiable->getKey()
-                        : null,
-                    'time' => microtime(true),
-                ];
-            } elseif ($event instanceof MessageLogged) {
-                $frame['log_calls'][] = [
-                    'level' => $event->level,
-                    'message' => $event->message,
-                    'context' => $this->masker()->mask($event->context),
-                    'time' => microtime(true),
-                ];
             }
+        } catch (Throwable $e) {
+            $this->handleInternalError($e);
         }
     }
 
@@ -692,11 +729,20 @@ class TraceReplayManager
      */
     protected function handleInternalError(Throwable $e): void
     {
-        if (function_exists('logger')) {
+        if ($this->handlingInternalError || ! function_exists('logger')) {
+            return;
+        }
+
+        $this->handlingInternalError = true;
+
+        try {
             logger()->error('[TraceReplay] Internal error: '.$e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+        } catch (Throwable) {
+        } finally {
+            $this->handlingInternalError = false;
         }
     }
 }
