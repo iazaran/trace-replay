@@ -188,7 +188,7 @@ it('AnthropicDriver defaults to a current model and reads text after thinking bl
     Http::assertSent(function (HttpRequest $request) {
         return $request->url() === 'https://api.anthropic.com/v1/messages'
             && $request['model'] === AnthropicDriver::DEFAULT_MODEL
-            && $request['max_tokens'] === AnthropicDriver::DEFAULT_MAX_TOKENS
+            && $request['max_tokens'] === AnthropicDriver::THINKING_MODEL_MAX_TOKENS
             && $request['fallbacks'] === 'default'
             && $request->hasHeader('anthropic-beta', 'server-side-fallback-2026-07-01')
             && $request->hasHeader('x-api-key', 'test-key');
@@ -201,24 +201,68 @@ it('AnthropicDriver treats the legacy gpt-4o config default as no model', functi
 
     Http::fake(['api.anthropic.com/*' => Http::response(anthropicTextResponse())]);
 
+    Log::spy();
+
     expect(app(AnthropicDriver::class)->complete('debug this'))->toBe('ok');
 
     Http::assertSent(fn (HttpRequest $request) => $request['model'] === AnthropicDriver::DEFAULT_MODEL);
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn ($message, $context) => ($context['configured_model'] ?? null) === 'gpt-4o')
+        ->once();
 });
 
-it('AnthropicDriver sends a pinned model as before, without fallback options', function () {
-    config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.model' => 'claude-opus-5-5']);
+it('AnthropicDriver sends a pinned pre-Claude-5 model exactly as 1.3.1 did', function () {
+    config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.model' => 'claude-sonnet-4-5']);
 
     Http::fake(['api.anthropic.com/*' => Http::response(anthropicTextResponse())]);
 
     expect(app(AnthropicDriver::class)->complete('debug this'))->toBe('ok');
 
     Http::assertSent(function (HttpRequest $request) {
-        return $request['model'] === 'claude-opus-5-5'
-            && $request['max_tokens'] === AnthropicDriver::PINNED_MODEL_MAX_TOKENS
+        return $request['model'] === 'claude-sonnet-4-5'
+            && $request['max_tokens'] === AnthropicDriver::LEGACY_MODEL_MAX_TOKENS
             && ! array_key_exists('fallbacks', $request->data())
             && ! $request->hasHeader('anthropic-beta');
     });
+});
+
+it('AnthropicDriver gives pinned thinking models room to answer', function (string $model, bool $fallback) {
+    config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.model' => $model]);
+
+    Http::fake(['api.anthropic.com/*' => Http::response(anthropicTextResponse())]);
+
+    app(AnthropicDriver::class)->complete('debug this');
+
+    Http::assertSent(function (HttpRequest $request) use ($model, $fallback) {
+        return $request['model'] === $model
+            && $request['max_tokens'] === AnthropicDriver::THINKING_MODEL_MAX_TOKENS
+            && array_key_exists('fallbacks', $request->data()) === $fallback
+            && $request->hasHeader('anthropic-beta') === $fallback;
+    });
+})->with([
+    'default id pinned (README example)' => ['claude-opus-5-5', true],
+    'sonnet 5.5' => ['claude-sonnet-5-5', true],
+    'haiku 5.5 (no server-side fallback)' => ['claude-haiku-5-5', false],
+]);
+
+it('AnthropicDriver logs when thinking uses the whole output budget', function () {
+    config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.model' => null]);
+
+    Http::fake([
+        'api.anthropic.com/*' => Http::response([
+            'stop_reason' => 'max_tokens',
+            'content' => [['type' => 'thinking', 'thinking' => '', 'signature' => 'sig']],
+        ]),
+    ]);
+
+    Log::spy();
+
+    expect(app(AnthropicDriver::class)->complete('debug this'))->toBeNull();
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn ($message, $context) => ($context['reason'] ?? null) === 'max_tokens')
+        ->once();
 });
 
 it('AnthropicDriver honours a configured max_tokens', function () {
@@ -485,6 +529,30 @@ it('TraceReplayAuthMiddleware keeps a whitespace-only allowlist closed', functio
 
     $this->get('/trace-replay')->assertForbidden();
 });
+
+it('allowed_ips parsed from the environment matches trimmed entries and stays closed when blank', function (string $env, array $expected, int $status) {
+    $previous = $_SERVER['TRACE_REPLAY_ALLOWED_IPS'] ?? null;
+    $_SERVER['TRACE_REPLAY_ALLOWED_IPS'] = $env;
+
+    try {
+        $config = require __DIR__.'/../../config/trace-replay.php';
+    } finally {
+        if ($previous === null) {
+            unset($_SERVER['TRACE_REPLAY_ALLOWED_IPS']);
+        } else {
+            $_SERVER['TRACE_REPLAY_ALLOWED_IPS'] = $previous;
+        }
+    }
+
+    expect(array_values($config['allowed_ips']))->toBe($expected);
+
+    config(['trace-replay.allowed_ips' => $config['allowed_ips']]);
+
+    $this->get('/trace-replay')->assertStatus($status);
+})->with([
+    'comma and space separated' => ['10.0.0.1, 127.0.0.1', ['10.0.0.1', ' 127.0.0.1'], 200],
+    'whitespace only' => ['   ', ['   '], 403],
+]);
 
 // ── Batch persistence ───────────────────────────────────────────────────────
 

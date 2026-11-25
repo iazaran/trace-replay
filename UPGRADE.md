@@ -43,16 +43,20 @@ The changes affect the defaults:
   `gpt-4o` (OpenAI, unchanged), `claude-opus-5-5` (Anthropic) and `llama3`
   (Ollama). Previously `gpt-4o` was sent to every provider, so the Anthropic
   and Ollama drivers failed unless a model was set. The Anthropic driver also
-  ignores a non-`claude` model, such as the `gpt-4o` default in configs
+  ignores (and logs) a non-`claude` model, such as the `gpt-4o` default in configs
   published before 1.3.2. With Ollama and an older published config, set
   `TRACE_REPLAY_AI_MODEL` explicitly.
 - The Anthropic driver reads the answer from the response's text blocks
   (current models return thinking blocks first) and returns no answer on a
-  refusal. With its default model it allows up to 16,000 output tokens and
+  refusal. Claude 5-generation, Fable and Mythos models think by default and
+  get up to 16,000 output tokens; on those, 1.3.1 never returned an answer
+  because it read the first content block. Earlier models (for example
+  `claude-sonnet-4-5`) are sent exactly as before, with a 1,024-token cap.
+  The new optional `ai.max_tokens` (`TRACE_REPLAY_AI_MAX_TOKENS`) overrides
+  either cap. On models that support it (`claude-opus-5-5`, `claude-opus-5`,
+  `claude-sonnet-5-5`, `claude-fable-5-1`, `claude-fable-5-2`), the driver
   opts into Anthropic's server-side refusal fallback (`fallbacks: "default"`),
-  which may answer from another model. A pinned model keeps the 1,024-token
-  cap and gets no fallback; raise the cap with the new optional
-  `ai.max_tokens` (`TRACE_REPLAY_AI_MAX_TOKENS`).
+  which may answer a declined request from another model.
 - The Ollama driver uses `http://localhost:11434/api/generate` when
   `ai.base_url` is empty. A configured URL is used unchanged.
 - New optional `ai.timeout` (`TRACE_REPLAY_AI_TIMEOUT`, default 60 seconds,

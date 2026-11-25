@@ -420,7 +420,7 @@ TRACE_REPLAY_AI_BASE_URL=http://localhost:11434/api/generate
 TRACE_REPLAY_AI_TIMEOUT=60
 ```
 
-When `TRACE_REPLAY_AI_MODEL` is empty, each driver uses its own default: `gpt-4o` (OpenAI), `claude-opus-5-5` (Anthropic), or `llama3` (Ollama). With the Anthropic default model, TraceReplay allows up to 16,000 output tokens and opts into Anthropic's server-side refusal fallback; a model you pin is sent with a 1,024-token cap unless you set `TRACE_REPLAY_AI_MAX_TOKENS`.
+When `TRACE_REPLAY_AI_MODEL` is empty, each driver uses its own default: `gpt-4o` (OpenAI), `claude-opus-5-5` (Anthropic), or `llama3` (Ollama). Claude 5-generation, Fable and Mythos models think by default, so the Anthropic driver allows them up to 16,000 output tokens; earlier models keep a 1,024-token cap. Set `TRACE_REPLAY_AI_MAX_TOKENS` to override either. On models that support it (such as `claude-opus-5-5`), the driver also opts into Anthropic's server-side refusal fallback.
 
 With a key configured, clicking **"Ask AI"** sends the prompt to your chosen AI provider and displays the response in the dashboard. If the provider is unreachable or times out, the dashboard still shows the copyable prompt.
 
