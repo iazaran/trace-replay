@@ -14,7 +14,7 @@ use TraceReplay\TraceReplayManager;
  * @method static \TraceReplay\TraceReplayManager context(array $data)
  * @method static void captureResponseOnLastStep(array $responsePayload, int $httpStatus = 200)
  * @method static void captureException(\Throwable $exception)
- * @method static void end(string $status = 'success')
+ * @method static void end(string $status = 'success', ?\Throwable $exception = null)
  * @method static \TraceReplay\Models\Trace|null getCurrentTrace()
  * @method static void setTraceParent(?string $traceParent)
  * @method static void setWorkspaceId(?string $id)

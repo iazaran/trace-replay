@@ -125,7 +125,7 @@ return [
         'allow_mutating_methods' => env('TRACE_REPLAY_REPLAY_MUTATING', false),
         // Comma-separated host allowlist for replay targets. When empty,
         // override_url may only target the originally recorded host.
-        'allowed_hosts' => array_filter(explode(',', env('TRACE_REPLAY_REPLAY_ALLOWED_HOSTS', ''))),
+        'allowed_hosts' => array_values(array_filter(array_map('trim', explode(',', (string) env('TRACE_REPLAY_REPLAY_ALLOWED_HOSTS', ''))))),
     ],
 
     /*
@@ -162,7 +162,7 @@ return [
     | dashboard. CIDR notation is not evaluated — exact match only.
     | Leave empty to allow all IPs (rely on middleware for auth instead).
     */
-    'allowed_ips' => array_filter(explode(',', env('TRACE_REPLAY_ALLOWED_IPS', ''))),
+    'allowed_ips' => array_values(array_filter(array_map('trim', explode(',', (string) env('TRACE_REPLAY_ALLOWED_IPS', ''))))),
 
     /*
     |--------------------------------------------------------------------------
@@ -187,15 +187,19 @@ return [
     |--------------------------------------------------------------------------
     | AI Integration (Optional)
     |--------------------------------------------------------------------------
-    | When openai_api_key is set, the "AI Fix" button in the dashboard will
-    | call the OpenAI API directly and stream the response. When null, users
-    | receive a copyable prompt instead (no external call is made).
+    | When an API key is set (or the driver is ollama), the "AI Fix" button in
+    | the dashboard calls the configured provider. Otherwise users receive a
+    | copyable prompt instead (no external call is made).
+    |
+    | When model is empty, each driver uses its own default:
+    | openai => gpt-4o, anthropic => claude-opus-5-5, ollama => llama3.
     */
     'ai' => [
         'driver' => env('TRACE_REPLAY_AI_DRIVER', 'openai'), // openai, anthropic, ollama
         'api_key' => env('TRACE_REPLAY_AI_KEY', env('TRACE_REPLAY_OPENAI_KEY')),
-        'model' => env('TRACE_REPLAY_AI_MODEL', 'gpt-4o'),
+        'model' => env('TRACE_REPLAY_AI_MODEL'),
         'base_url' => env('TRACE_REPLAY_AI_BASE_URL'), // For Ollama or custom endpoints
+        'timeout' => env('TRACE_REPLAY_AI_TIMEOUT', 120), // seconds
     ],
 
     /*

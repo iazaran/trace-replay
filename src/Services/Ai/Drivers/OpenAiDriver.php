@@ -10,7 +10,7 @@ class OpenAiDriver implements AiDriverInterface
     public function complete(string $prompt): ?string
     {
         $apiKey = config('trace-replay.ai.api_key');
-        $model = config('trace-replay.ai.model', 'gpt-4o');
+        $model = config('trace-replay.ai.model') ?: 'gpt-4o';
         $baseUrl = rtrim((string) (config('trace-replay.ai.base_url') ?: 'https://api.openai.com/v1'), '/');
 
         if (! $apiKey) {
@@ -18,7 +18,7 @@ class OpenAiDriver implements AiDriverInterface
         }
 
         $response = Http::withToken($apiKey)
-            ->timeout(60)
+            ->timeout((int) (config('trace-replay.ai.timeout') ?: 120))
             ->post($baseUrl.'/chat/completions', [
                 'model' => $model,
                 'messages' => [

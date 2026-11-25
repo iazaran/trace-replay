@@ -17,7 +17,11 @@ class TraceReplayAuthMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $allowedIps = config('trace-replay.allowed_ips', []);
+        // Trim entries so "10.0.0.1, 10.0.0.2" style lists match as intended.
+        $allowedIps = array_values(array_filter(array_map(
+            static fn ($ip) => \is_string($ip) ? trim($ip) : $ip,
+            (array) config('trace-replay.allowed_ips', [])
+        )));
 
         if (! empty($allowedIps) && ! \in_array($request->ip(), $allowedIps, true)) {
             abort(403, 'Access to TraceReplay dashboard is restricted by IP allowlist.');
