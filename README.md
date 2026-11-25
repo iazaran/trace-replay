@@ -159,8 +159,9 @@ return [
     'ai' => [
         'driver' => env('TRACE_REPLAY_AI_DRIVER', 'openai'),
         'api_key' => env('TRACE_REPLAY_AI_KEY'),
-        'model' => env('TRACE_REPLAY_AI_MODEL', 'gpt-4o'),
+        'model' => env('TRACE_REPLAY_AI_MODEL'), // empty = driver default
         'base_url' => env('TRACE_REPLAY_AI_BASE_URL'),
+        'timeout' => env('TRACE_REPLAY_AI_TIMEOUT', 120),
     ],
 
     // Async batch persistence via queue (Reduces overhead)
@@ -172,7 +173,7 @@ return [
     'auto_trace' => [
         'jobs'     => true,
         'commands' => false,
-        'livewire' => true,
+        'livewire' => true, // Livewire 2, 3 and 4 hydrate/dehydrate checkpoints
         'capture_job_payload' => false,
     ],
 ];
@@ -407,15 +408,20 @@ TRACE_REPLAY_AI_MODEL=gpt-4o
 # Or Anthropic Claude
 TRACE_REPLAY_AI_DRIVER=anthropic
 TRACE_REPLAY_AI_KEY=sk-ant-your-key
-TRACE_REPLAY_AI_MODEL=claude-3-5-sonnet-latest
+TRACE_REPLAY_AI_MODEL=claude-opus-5-5
 
 # Or Ollama (local, no API key needed)
 TRACE_REPLAY_AI_DRIVER=ollama
 TRACE_REPLAY_AI_MODEL=llama3
 TRACE_REPLAY_AI_BASE_URL=http://localhost:11434/api/generate
+
+# Optional: seconds to wait for the provider (default 120)
+TRACE_REPLAY_AI_TIMEOUT=120
 ```
 
-With a key configured, clicking **"Ask AI"** sends the prompt to your chosen AI provider and displays the response in the dashboard.
+When `TRACE_REPLAY_AI_MODEL` is empty, each driver uses its own default: `gpt-4o` (OpenAI), `claude-opus-5-5` (Anthropic), or `llama3` (Ollama). For Ollama, `TRACE_REPLAY_AI_BASE_URL` may be either the full `/api/generate` endpoint or just the host (for example `http://localhost:11434`).
+
+With a key configured, clicking **"Ask AI"** sends the prompt to your chosen AI provider and displays the response in the dashboard. If the provider is unreachable or times out, the dashboard still shows the copyable prompt.
 
 ---
 
