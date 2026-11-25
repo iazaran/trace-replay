@@ -10,10 +10,13 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use TraceReplay\Facades\TraceReplay;
 use TraceReplay\Http\Middleware\TraceReplayTenantMiddleware;
+use TraceReplay\Models\Project;
 use TraceReplay\Models\Trace;
 use TraceReplay\Models\TraceStep;
+use TraceReplay\Models\Workspace;
 use TraceReplay\Services\Ai\AiDriverInterface;
 use TraceReplay\Services\Ai\Drivers\AnthropicDriver;
+use TraceReplay\Services\Ai\Drivers\Concerns\InteractsWithAiProvider;
 use TraceReplay\Services\Ai\Drivers\OllamaDriver;
 use TraceReplay\Services\Ai\Drivers\OpenAiDriver;
 use TraceReplay\Services\AiPromptService;
@@ -21,6 +24,20 @@ use TraceReplay\Services\NotificationService;
 use TraceReplay\TraceReplayServiceProvider;
 
 final class TraceReplayLivewireCounterStub {}
+
+function registerStubbedLivewireTracing(): void
+{
+    $provider = new TraceReplayServiceProvider(app());
+    (fn () => $this->registerLivewireTracing())->call($provider);
+}
+
+function anthropicTextResponse(string $text = 'ok'): array
+{
+    return [
+        'stop_reason' => 'end_turn',
+        'content' => [['type' => 'text', 'text' => $text]],
+    ];
+}
 
 // ── Exception reporting ─────────────────────────────────────────────────────
 
@@ -70,9 +87,7 @@ it('records Livewire 3+ hydrate and dehydrate hooks as checkpoints', function ()
 
     Livewire\Livewire::$listeners = [];
     config(['trace-replay.auto_trace.livewire' => true]);
-
-    $provider = new TraceReplayServiceProvider(app());
-    (fn () => $this->registerLivewireTracing())->call($provider);
+    registerStubbedLivewireTracing();
 
     expect(array_keys(Livewire\Livewire::$listeners))->toBe(['hydrate', 'dehydrate']);
 
@@ -92,6 +107,47 @@ it('records Livewire 3+ hydrate and dehydrate hooks as checkpoints', function ()
     ]);
 });
 
+it('labels anonymous Livewire components by their component name', function () {
+    require_once __DIR__.'/../Stubs/Livewire.php';
+
+    if (! method_exists(Livewire\Livewire::class, 'fire')) {
+        $this->markTestSkipped('The real Livewire package is installed.');
+    }
+
+    Livewire\Livewire::$listeners = [];
+    config(['trace-replay.auto_trace.livewire' => true]);
+    registerStubbedLivewireTracing();
+
+    // Livewire 4 single-file components compile to anonymous classes.
+    $named = new class
+    {
+        public function getName(): string
+        {
+            return 'pages::counter';
+        }
+    };
+    $broken = new class
+    {
+        public function getName(): string
+        {
+            throw new RuntimeException('not booted');
+        }
+    };
+
+    TraceReplay::start('Livewire SFC Request');
+    Livewire\Livewire::fire('hydrate', $named, [], null);
+    Livewire\Livewire::fire('dehydrate', $broken, null);
+    $trace = TraceReplay::getCurrentTrace();
+    TraceReplay::end();
+
+    $labels = TraceStep::where('trace_id', $trace->id)->orderBy('step_order')->pluck('label')->all();
+
+    expect($labels)->toBe([
+        'Livewire Hydrate: pages::counter',
+        'Livewire Dehydrate: anonymous component',
+    ]);
+});
+
 it('does not register Livewire hooks when Livewire auto-tracing is disabled', function () {
     require_once __DIR__.'/../Stubs/Livewire.php';
 
@@ -101,14 +157,12 @@ it('does not register Livewire hooks when Livewire auto-tracing is disabled', fu
 
     Livewire\Livewire::$listeners = [];
     config(['trace-replay.auto_trace.livewire' => false]);
-
-    $provider = new TraceReplayServiceProvider(app());
-    (fn () => $this->registerLivewireTracing())->call($provider);
+    registerStubbedLivewireTracing();
 
     expect(Livewire\Livewire::$listeners)->toBe([]);
 });
 
-// ── AI drivers ──────────────────────────────────────────────────────────────
+// ── Anthropic driver ────────────────────────────────────────────────────────
 
 it('AnthropicDriver defaults to a current model and reads text after thinking blocks', function () {
     config([
@@ -134,31 +188,51 @@ it('AnthropicDriver defaults to a current model and reads text after thinking bl
     Http::assertSent(function (HttpRequest $request) {
         return $request->url() === 'https://api.anthropic.com/v1/messages'
             && $request['model'] === AnthropicDriver::DEFAULT_MODEL
+            && $request['max_tokens'] === AnthropicDriver::DEFAULT_MAX_TOKENS
             && $request['fallbacks'] === 'default'
             && $request->hasHeader('anthropic-beta', 'server-side-fallback-2026-07-01')
             && $request->hasHeader('x-api-key', 'test-key');
     });
 });
 
-it('AnthropicDriver sends no fallback options for models without server-side fallback', function () {
-    config([
-        'trace-replay.ai.api_key' => 'test-key',
-        'trace-replay.ai.model' => 'claude-haiku-4-5',
-    ]);
+it('AnthropicDriver treats the legacy gpt-4o config default as no model', function () {
+    // Configs published before 1.3.2 carry env('TRACE_REPLAY_AI_MODEL', 'gpt-4o').
+    config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.model' => 'gpt-4o']);
 
-    Http::fake([
-        'api.anthropic.com/*' => Http::response([
-            'content' => [['type' => 'text', 'text' => 'ok']],
-        ]),
-    ]);
+    Http::fake(['api.anthropic.com/*' => Http::response(anthropicTextResponse())]);
+
+    expect(app(AnthropicDriver::class)->complete('debug this'))->toBe('ok');
+
+    Http::assertSent(fn (HttpRequest $request) => $request['model'] === AnthropicDriver::DEFAULT_MODEL);
+});
+
+it('AnthropicDriver sends a pinned model as before, without fallback options', function () {
+    config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.model' => 'claude-opus-5-5']);
+
+    Http::fake(['api.anthropic.com/*' => Http::response(anthropicTextResponse())]);
 
     expect(app(AnthropicDriver::class)->complete('debug this'))->toBe('ok');
 
     Http::assertSent(function (HttpRequest $request) {
-        return $request['model'] === 'claude-haiku-4-5'
+        return $request['model'] === 'claude-opus-5-5'
+            && $request['max_tokens'] === AnthropicDriver::PINNED_MODEL_MAX_TOKENS
             && ! array_key_exists('fallbacks', $request->data())
             && ! $request->hasHeader('anthropic-beta');
     });
+});
+
+it('AnthropicDriver honours a configured max_tokens', function () {
+    config([
+        'trace-replay.ai.api_key' => 'test-key',
+        'trace-replay.ai.model' => 'claude-sonnet-5-5',
+        'trace-replay.ai.max_tokens' => '8000',
+    ]);
+
+    Http::fake(['api.anthropic.com/*' => Http::response(anthropicTextResponse())]);
+
+    app(AnthropicDriver::class)->complete('debug this');
+
+    Http::assertSent(fn (HttpRequest $request) => $request['max_tokens'] === 8000);
 });
 
 it('AnthropicDriver returns null for refusals', function () {
@@ -190,6 +264,8 @@ it('AnthropicDriver keeps only the text produced after a fallback switch', funct
 
     expect(app(AnthropicDriver::class)->complete('debug this'))->toBe('final answer');
 });
+
+// ── OpenAI / Ollama drivers ─────────────────────────────────────────────────
 
 it('OpenAiDriver still defaults to gpt-4o when no model is configured', function () {
     config([
@@ -224,27 +300,77 @@ it('OllamaDriver uses its default endpoint and model when none are configured', 
         && $request['model'] === OllamaDriver::DEFAULT_MODEL);
 });
 
-it('OllamaDriver appends the generate path to a bare host URL', function (string $baseUrl, string $expected) {
+it('OllamaDriver posts to a configured base_url unchanged', function (string $baseUrl) {
     config(['trace-replay.ai.base_url' => $baseUrl, 'trace-replay.ai.model' => 'llama3.2']);
 
     Http::fake(['*' => Http::response(['response' => 'ok'])]);
 
-    app(OllamaDriver::class)->complete('debug this');
+    expect(app(OllamaDriver::class)->complete('debug this'))->toBe('ok');
 
-    Http::assertSent(fn (HttpRequest $request) => $request->url() === $expected
+    Http::assertSent(fn (HttpRequest $request) => $request->url() === $baseUrl
         && $request['model'] === 'llama3.2');
 })->with([
-    'bare host' => ['http://ollama.test:11434', 'http://ollama.test:11434/api/generate'],
-    'trailing slash' => ['http://ollama.test:11434/', 'http://ollama.test:11434/api/generate'],
-    'full endpoint' => ['http://ollama.test:11434/api/generate', 'http://ollama.test:11434/api/generate'],
+    'generate endpoint' => ['http://ollama.test:11434/api/generate'],
+    'proxy at root' => ['http://proxy.test/'],
+    'proxy with query' => ['http://proxy.test/generate?key=abc'],
 ]);
+
+// ── Shared driver behaviour ─────────────────────────────────────────────────
+
+it('AI drivers fall back to a 60 second timeout for missing or invalid values', function (mixed $configured, int $expected) {
+    config(['trace-replay.ai.timeout' => $configured]);
+
+    $driver = new class
+    {
+        use InteractsWithAiProvider;
+
+        public function resolvedTimeout(): int
+        {
+            return $this->timeout();
+        }
+    };
+
+    expect($driver->resolvedTimeout())->toBe($expected);
+})->with([
+    'missing (older published config)' => [null, 60],
+    'empty env' => ['', 60],
+    'non-numeric' => ['abc', 60],
+    'zero' => [0, 60],
+    'configured' => ['15', 15],
+]);
+
+it('AI drivers log the status of failed responses without the response body', function () {
+    config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.driver' => 'openai']);
+
+    Http::fake([
+        'api.openai.com/*' => Http::response([
+            'error' => ['type' => 'invalid_request_error', 'message' => 'secret detail'],
+        ], 404),
+    ]);
+
+    Log::spy();
+
+    expect(app(OpenAiDriver::class)->complete('debug this'))->toBeNull();
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn ($message, $context) => str_contains($message, 'openai')
+            && $context === ['status' => 404, 'error_type' => 'invalid_request_error'])
+        ->once();
+});
 
 it('AiPromptService returns null instead of failing when the AI provider is unreachable', function () {
     config(['trace-replay.ai.api_key' => 'test-key', 'trace-replay.ai.driver' => 'openai']);
 
-    Http::fake(fn () => throw new ConnectionException('Connection timed out'));
+    Http::fake(fn () => throw new ConnectionException('cURL error 28 for https://proxy.test/v1?token=leaky'));
+
+    Log::spy();
 
     expect(app(AiPromptService::class)->callAi('debug this'))->toBeNull();
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn ($message, $context) => ! str_contains($message.json_encode($context), 'leaky')
+            && $context['exception'] === ConnectionException::class)
+        ->once();
 });
 
 it('dashboard AI prompt endpoint still returns the prompt when the AI provider times out', function () {
@@ -322,6 +448,11 @@ it('TraceReplayTenantMiddleware ignores array scope parameters instead of failin
 });
 
 it('TraceReplayTenantMiddleware still applies string scope parameters', function () {
+    $project = Project::create([
+        'workspace_id' => Workspace::create(['name' => 'WS'])->id,
+        'name' => 'Project',
+    ]);
+
     Route::get('/tenant-probe', function () {
         $trace = TraceReplay::start('Tenant Probe', forceSample: true);
 
@@ -331,9 +462,10 @@ it('TraceReplayTenantMiddleware still applies string scope parameters', function
         ]);
     })->middleware(TraceReplayTenantMiddleware::class);
 
-    $this->get('/tenant-probe?tr_workspace=ws-1')
+    $this->get("/tenant-probe?tr_workspace=ws-1&tr_project={$project->id}")
         ->assertOk()
-        ->assertJsonPath('workspace_id', 'ws-1');
+        ->assertJsonPath('workspace_id', 'ws-1')
+        ->assertJsonPath('project_id', $project->id);
 });
 
 it('TraceReplayAuthMiddleware trims configured IP addresses', function () {
@@ -342,9 +474,21 @@ it('TraceReplayAuthMiddleware trims configured IP addresses', function () {
     $this->get('/trace-replay')->assertOk();
 });
 
+it('TraceReplayAuthMiddleware still blocks IPs missing from a trimmed list', function () {
+    config(['trace-replay.allowed_ips' => [' 10.0.0.1 ', '10.0.0.2']]);
+
+    $this->get('/trace-replay')->assertForbidden();
+});
+
+it('TraceReplayAuthMiddleware keeps a whitespace-only allowlist closed', function () {
+    config(['trace-replay.allowed_ips' => ['   ']]);
+
+    $this->get('/trace-replay')->assertForbidden();
+});
+
 // ── Batch persistence ───────────────────────────────────────────────────────
 
-it('batch persistence stores valid UUIDs for every step', function () {
+it('batch persistence uses the model UUID generator for every step', function () {
     config(['trace-replay.batch_persistence' => true, 'trace-replay.queue.enabled' => false]);
 
     TraceReplay::start('Batch UUIDs');
@@ -356,7 +500,10 @@ it('batch persistence stores valid UUIDs for every step', function () {
 
     $ids = TraceStep::where('trace_id', $trace->id)->orderBy('step_order')->pluck('id');
 
+    // Version nibble of the generator Eloquent uses (v7 on Laravel 12+).
+    $version = ((string) (new TraceStep)->newUniqueId())[14];
+
     expect($ids)->toHaveCount(3)
         ->and($ids->unique())->toHaveCount(3)
-        ->and($ids->every(fn ($id) => Str::isUuid($id)))->toBeTrue();
+        ->and($ids->every(fn ($id) => Str::isUuid($id) && $id[14] === $version))->toBeTrue();
 });

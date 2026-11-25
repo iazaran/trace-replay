@@ -125,7 +125,7 @@ return [
         'allow_mutating_methods' => env('TRACE_REPLAY_REPLAY_MUTATING', false),
         // Comma-separated host allowlist for replay targets. When empty,
         // override_url may only target the originally recorded host.
-        'allowed_hosts' => array_values(array_filter(array_map('trim', explode(',', (string) env('TRACE_REPLAY_REPLAY_ALLOWED_HOSTS', ''))))),
+        'allowed_hosts' => array_filter(explode(',', (string) env('TRACE_REPLAY_REPLAY_ALLOWED_HOSTS', ''))),
     ],
 
     /*
@@ -162,7 +162,7 @@ return [
     | dashboard. CIDR notation is not evaluated — exact match only.
     | Leave empty to allow all IPs (rely on middleware for auth instead).
     */
-    'allowed_ips' => array_values(array_filter(array_map('trim', explode(',', (string) env('TRACE_REPLAY_ALLOWED_IPS', ''))))),
+    'allowed_ips' => array_filter(explode(',', (string) env('TRACE_REPLAY_ALLOWED_IPS', ''))),
 
     /*
     |--------------------------------------------------------------------------
@@ -199,7 +199,8 @@ return [
         'api_key' => env('TRACE_REPLAY_AI_KEY', env('TRACE_REPLAY_OPENAI_KEY')),
         'model' => env('TRACE_REPLAY_AI_MODEL'),
         'base_url' => env('TRACE_REPLAY_AI_BASE_URL'), // For Ollama or custom endpoints
-        'timeout' => env('TRACE_REPLAY_AI_TIMEOUT', 120), // seconds
+        'timeout' => env('TRACE_REPLAY_AI_TIMEOUT', 60), // seconds
+        'max_tokens' => env('TRACE_REPLAY_AI_MAX_TOKENS'), // Anthropic only; empty = driver default
     ],
 
     /*

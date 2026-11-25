@@ -231,7 +231,7 @@
         'api_key' => env('TRACE_REPLAY_AI_KEY'),
         'model'   => env('TRACE_REPLAY_AI_MODEL'), // empty = driver default
         'base_url' => env('TRACE_REPLAY_AI_BASE_URL'),
-        'timeout' => env('TRACE_REPLAY_AI_TIMEOUT', 120),
+        'timeout' => env('TRACE_REPLAY_AI_TIMEOUT', 60),
     ],
     'auto_trace' => [
         'jobs'     => env('TRACE_REPLAY_AUTO_TRACE_JOBS', true),

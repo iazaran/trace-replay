@@ -150,14 +150,40 @@ class TraceReplayServiceProvider extends ServiceProvider
 
         try {
             Livewire::listen($hydrateEvent, function ($component): void {
-                TraceReplay::checkpoint('Livewire Hydrate: '.get_class($component));
+                TraceReplay::checkpoint('Livewire Hydrate: '.static::livewireComponentLabel($component));
             });
             Livewire::listen($dehydrateEvent, function ($component): void {
-                TraceReplay::checkpoint('Livewire Dehydrate: '.get_class($component));
+                TraceReplay::checkpoint('Livewire Dehydrate: '.static::livewireComponentLabel($component));
             });
         } catch (\Throwable $e) {
             // Ignore if hook registration fails for specific versions
         }
+    }
+
+    /**
+     * The component's class name, or its Livewire name for anonymous classes
+     * (Livewire 4 single-file components), whose generated class names hold a
+     * NUL byte and a long cache path. Capped to fit the 255-char label column.
+     */
+    protected static function livewireComponentLabel(mixed $component): string
+    {
+        if (! \is_object($component)) {
+            return 'unknown';
+        }
+
+        $label = get_class($component);
+
+        if (str_contains($label, '@anonymous')) {
+            try {
+                $name = method_exists($component, 'getName') ? $component->getName() : null;
+            } catch (\Throwable) {
+                $name = null;
+            }
+
+            $label = \is_string($name) && $name !== '' ? $name : 'anonymous component';
+        }
+
+        return mb_substr($label, 0, 200);
     }
 
     /**

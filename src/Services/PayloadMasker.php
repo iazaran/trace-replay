@@ -13,24 +13,14 @@ class PayloadMasker
             return $data;
         }
 
-        // Resolve the field list once per call rather than once per nested array.
-        return $this->maskArray($data, array_flip($this->fields()));
-    }
-
-    /**
-     * @param  array<mixed>  $data
-     * @param  array<string, int>  $fields  normalized field names as keys
-     * @return array<mixed>
-     */
-    protected function maskArray(array $data, array $fields): array
-    {
         $result = [];
+        $fields = $this->fields();
 
         foreach ($data as $key => $value) {
-            if (isset($fields[$this->normalizeKey((string) $key)])) {
+            if (\in_array($this->normalizeKey((string) $key), $fields, true)) {
                 $result[$key] = '********';
             } elseif (is_array($value)) {
-                $result[$key] = $this->maskArray($value, $fields);
+                $result[$key] = $this->mask($value);
             } else {
                 $result[$key] = $value;
             }

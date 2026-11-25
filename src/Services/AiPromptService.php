@@ -126,9 +126,12 @@ class AiPromptService
         try {
             return $this->driver->complete($prompt);
         } catch (\Throwable $e) {
+            // Log the exception class only: transport messages can include the
+            // request URL, and with it any credentials in the query string.
             try {
-                logger()->warning('[TraceReplay] AI driver request failed: '.$e->getMessage(), [
+                logger()->warning('[TraceReplay] AI driver request failed', [
                     'driver' => config('trace-replay.ai.driver'),
+                    'exception' => \get_class($e),
                 ]);
             } catch (\Throwable) {
             }
