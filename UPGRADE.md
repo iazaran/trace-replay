@@ -68,7 +68,20 @@ The changes affect the defaults:
   HTTP 500. Failed calls are logged as warnings with the HTTP status or
   exception class only (no prompt, body or URL).
 
-### 4. Smaller fixes
+### 4. Sync jobs no longer take over the surrounding trace
+
+A job dispatched on the `sync` connection (for example with `dispatchSync()`,
+or `QUEUE_CONNECTION=sync`) inside a traced HTTP request, command or job used
+to rename that trace to `Job: …`, replace its tags and switch its `type` to
+`job`. HTTP requests then showed up under the dashboard's job filter. The job
+is now recorded inside the surrounding trace as `Job Started: …` and
+`Job Completed: …` (or `Job Failed: …`) checkpoints, and the surrounding trace
+keeps its name, tags and type.
+
+**What you will see:** no change for jobs processed by a queue worker, or for
+sync jobs run with no trace active; they still get their own `Job: …` trace.
+
+### 5. Smaller fixes
 
 - Failure notification links honour `trace-replay.route_prefix` instead of
   always pointing at `/trace-replay`.

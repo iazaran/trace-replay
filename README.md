@@ -289,6 +289,8 @@ public function test_booking_records_steps()
 
 Queue jobs are automatically traced when `auto_trace.jobs` is enabled (default: `true`). No manual listener registration is needed — the service provider wires everything up.
 
+Each job processed by a queue worker gets its own `Job: …` trace. A job that runs on the `sync` connection inside something already being traced (an HTTP request, a command or another job) is recorded inside that trace as `Job Started: …` / `Job Completed: …` (or `Job Failed: …`) checkpoints instead.
+
 To disable, set `TRACE_REPLAY_AUTO_TRACE_JOBS=false` in your `.env`.
 
 Job payloads are not captured by default because queue payloads often contain sensitive application data. To opt in:

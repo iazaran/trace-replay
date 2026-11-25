@@ -322,6 +322,7 @@ public function test_booking_records_steps()
 
             <h2 id="auto-tracing">Auto Tracing — Jobs, Commands & Livewire</h2>
             <p>Queue jobs are automatically traced when <code>auto_trace.jobs</code> is enabled (default: <code>true</code>). No manual listener registration needed — the service provider wires everything up.</p>
+            <p>Each job processed by a queue worker gets its own <code>Job: …</code> trace. A job that runs on the <code>sync</code> connection inside something already being traced (an HTTP request, a command or another job) is recorded inside that trace as <code>Job Started: …</code> / <code>Job Completed: …</code> (or <code>Job Failed: …</code>) checkpoints instead.</p>
             <p>Artisan commands can be auto-traced by enabling <code>auto_trace.commands</code>:</p>
             <pre><code class="language-bash">TRACE_REPLAY_AUTO_TRACE_COMMANDS=true</code></pre>
             <p>Internal commands like <code>queue:work</code>, <code>horizon</code>, and <code>trace-replay:prune</code> are excluded by default (see <code>auto_trace.exclude_commands</code>).</p>

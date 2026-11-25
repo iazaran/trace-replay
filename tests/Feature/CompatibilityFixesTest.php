@@ -1,6 +1,9 @@
 <?php
 
+use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
@@ -9,6 +12,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use TraceReplay\Facades\TraceReplay;
+use TraceReplay\Http\Middleware\TraceMiddleware;
 use TraceReplay\Http\Middleware\TraceReplayTenantMiddleware;
 use TraceReplay\Models\Project;
 use TraceReplay\Models\Trace;
@@ -24,6 +28,30 @@ use TraceReplay\Services\NotificationService;
 use TraceReplay\TraceReplayServiceProvider;
 
 final class TraceReplayLivewireCounterStub {}
+
+final class TraceReplaySyncProbeJob implements ShouldQueue
+{
+    use Dispatchable, Queueable;
+
+    public function __construct(public bool $fail = false) {}
+
+    public function handle(): void
+    {
+        TraceReplay::checkpoint('Inside Job');
+
+        if ($this->fail) {
+            throw new RuntimeException('sync job failed');
+        }
+    }
+}
+
+/**
+ * @return array<int, string>
+ */
+function traceStepLabels(Trace $trace): array
+{
+    return TraceStep::where('trace_id', $trace->id)->orderBy('step_order')->pluck('label')->all();
+}
 
 function registerStubbedLivewireTracing(): void
 {
@@ -574,4 +602,107 @@ it('batch persistence uses the model UUID generator for every step', function ()
     expect($ids)->toHaveCount(3)
         ->and($ids->unique())->toHaveCount(3)
         ->and($ids->every(fn ($id) => Str::isUuid($id) && $id[14] === $version))->toBeTrue();
+});
+
+// ── Sync queue jobs ─────────────────────────────────────────────────────────
+
+it('records a sync job inside a traced request without relabelling the request trace', function () {
+    config(['trace-replay.auto_trace.jobs' => true]);
+
+    Route::middleware([TraceMiddleware::class])->get('/sync-job-probe', function () {
+        TraceReplaySyncProbeJob::dispatchSync();
+
+        return response()->json(['ok' => true]);
+    });
+
+    $this->get('/sync-job-probe')->assertOk();
+
+    expect(Trace::count())->toBe(1);
+
+    $trace = Trace::firstOrFail();
+
+    expect($trace->name)->toBe('HTTP GET /sync-job-probe')
+        ->and($trace->type)->toBe('http')
+        ->and($trace->status)->toBe('success')
+        ->and($trace->tags)->toBe([])
+        ->and(traceStepLabels($trace))->toBe([
+            'Job Started: TraceReplaySyncProbeJob',
+            'Inside Job',
+            'Job Completed: TraceReplaySyncProbeJob',
+            'HTTP Request',
+        ]);
+
+    $started = TraceStep::where('trace_id', $trace->id)->where('label', 'Job Started: TraceReplaySyncProbeJob')->firstOrFail();
+
+    expect($started->state_snapshot)->toHaveKeys(['queue', 'job_id', 'connection'])
+        ->and($started->state_snapshot['connection'])->toBe('sync');
+});
+
+it('records a failed sync job inside a traced request without ending the request trace', function () {
+    config(['trace-replay.auto_trace.jobs' => true]);
+
+    Route::middleware([TraceMiddleware::class])->get('/sync-job-failure', function () {
+        try {
+            TraceReplaySyncProbeJob::dispatchSync(true);
+        } catch (RuntimeException) {
+        }
+
+        TraceReplay::checkpoint('After Job');
+
+        return response()->json(['ok' => true]);
+    });
+
+    $this->get('/sync-job-failure')->assertOk();
+
+    expect(Trace::count())->toBe(1);
+
+    $trace = Trace::firstOrFail();
+
+    expect($trace->name)->toBe('HTTP GET /sync-job-failure')
+        ->and($trace->type)->toBe('http')
+        ->and($trace->status)->toBe('success')
+        ->and(traceStepLabels($trace))->toBe([
+            'Job Started: TraceReplaySyncProbeJob',
+            'Inside Job',
+            'Job Failed: TraceReplaySyncProbeJob',
+            'After Job',
+            'HTTP Request',
+        ]);
+
+    $failed = TraceStep::where('trace_id', $trace->id)->where('label', 'Job Failed: TraceReplaySyncProbeJob')->firstOrFail();
+
+    expect($failed->state_snapshot['error'])->toBe('sync job failed');
+});
+
+it('still gives a standalone sync job its own job trace', function () {
+    config(['trace-replay.auto_trace.jobs' => true]);
+
+    TraceReplaySyncProbeJob::dispatchSync();
+
+    expect(Trace::count())->toBe(1);
+
+    $trace = Trace::firstOrFail();
+
+    expect($trace->name)->toBe('Job: TraceReplaySyncProbeJob')
+        ->and($trace->type)->toBe('job')
+        ->and($trace->status)->toBe('success')
+        ->and($trace->tags)->toMatchArray(['connection' => 'sync'])
+        ->and(traceStepLabels($trace))->toBe(['Job Started', 'Inside Job', 'Job Completed']);
+});
+
+it('still marks a standalone failed sync job trace as an error', function () {
+    config(['trace-replay.auto_trace.jobs' => true]);
+
+    try {
+        TraceReplaySyncProbeJob::dispatchSync(true);
+    } catch (RuntimeException) {
+    }
+
+    $trace = Trace::firstOrFail();
+
+    expect($trace->name)->toBe('Job: TraceReplaySyncProbeJob')
+        ->and($trace->type)->toBe('job')
+        ->and($trace->status)->toBe('error')
+        ->and(traceStepLabels($trace))->toBe(['Job Started', 'Inside Job', 'Job Failed'])
+        ->and(TraceReplay::getCurrentTrace())->toBeNull();
 });
