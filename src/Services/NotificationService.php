@@ -29,7 +29,7 @@ class NotificationService
         }
 
         $errorStep = $trace->error_step;
-        $dashboardUrl = rtrim(config('app.url', ''), '/').'/trace-replay/traces/'.$trace->id;
+        $dashboardUrl = $this->dashboardUrl($trace);
 
         $subject = "[TraceReplay] Trace Failed: {$trace->name}";
         $body = $this->buildEmailBody($trace, $errorStep, $dashboardUrl);
@@ -47,7 +47,7 @@ class NotificationService
         }
 
         $errorStep = $trace->error_step;
-        $dashboardUrl = rtrim(config('app.url', ''), '/').'/trace-replay/traces/'.$trace->id;
+        $dashboardUrl = $this->dashboardUrl($trace);
 
         $errorText = is_array($errorStep?->error_reason)
             ? ($errorStep->error_reason['message'] ?? json_encode($errorStep->error_reason))
@@ -73,6 +73,18 @@ class NotificationService
         ];
 
         Http::post($webhookUrl, $payload);
+    }
+
+    /**
+     * Link to the trace in the dashboard, honouring a custom route_prefix.
+     */
+    protected function dashboardUrl(Trace $trace): string
+    {
+        $prefix = trim((string) config('trace-replay.route_prefix', 'trace-replay'), '/');
+
+        return rtrim((string) config('app.url', ''), '/')
+            .($prefix === '' ? '' : '/'.$prefix)
+            .'/traces/'.$trace->id;
     }
 
     private function buildEmailBody(Trace $trace, $errorStep, string $dashboardUrl): string

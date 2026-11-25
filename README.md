@@ -159,8 +159,10 @@ return [
     'ai' => [
         'driver' => env('TRACE_REPLAY_AI_DRIVER', 'openai'),
         'api_key' => env('TRACE_REPLAY_AI_KEY'),
-        'model' => env('TRACE_REPLAY_AI_MODEL', 'gpt-4o'),
+        'model' => env('TRACE_REPLAY_AI_MODEL'), // empty = driver default
         'base_url' => env('TRACE_REPLAY_AI_BASE_URL'),
+        'timeout' => env('TRACE_REPLAY_AI_TIMEOUT', 60),
+        'max_tokens' => env('TRACE_REPLAY_AI_MAX_TOKENS'), // Anthropic only
     ],
 
     // Async batch persistence via queue (Reduces overhead)
@@ -172,7 +174,7 @@ return [
     'auto_trace' => [
         'jobs'     => true,
         'commands' => false,
-        'livewire' => true,
+        'livewire' => true, // Livewire 2, 3 and 4 hydrate/dehydrate checkpoints
         'capture_job_payload' => false,
     ],
 ];
@@ -286,6 +288,8 @@ public function test_booking_records_steps()
 ### Auto Queue-Job Tracing
 
 Queue jobs are automatically traced when `auto_trace.jobs` is enabled (default: `true`). No manual listener registration is needed — the service provider wires everything up.
+
+Each job processed by a queue worker gets its own `Job: …` trace. A job that runs on the `sync` connection inside something already being traced (an HTTP request, a command or another job) is recorded inside that trace as `Job Started: …` / `Job Completed: …` (or `Job Failed: …`) checkpoints instead.
 
 To disable, set `TRACE_REPLAY_AUTO_TRACE_JOBS=false` in your `.env`.
 
@@ -407,15 +411,20 @@ TRACE_REPLAY_AI_MODEL=gpt-4o
 # Or Anthropic Claude
 TRACE_REPLAY_AI_DRIVER=anthropic
 TRACE_REPLAY_AI_KEY=sk-ant-your-key
-TRACE_REPLAY_AI_MODEL=claude-3-5-sonnet-latest
+TRACE_REPLAY_AI_MODEL=claude-opus-5-5
 
 # Or Ollama (local, no API key needed)
 TRACE_REPLAY_AI_DRIVER=ollama
 TRACE_REPLAY_AI_MODEL=llama3
 TRACE_REPLAY_AI_BASE_URL=http://localhost:11434/api/generate
+
+# Optional: seconds to wait for the provider (default 60)
+TRACE_REPLAY_AI_TIMEOUT=60
 ```
 
-With a key configured, clicking **"Ask AI"** sends the prompt to your chosen AI provider and displays the response in the dashboard.
+When `TRACE_REPLAY_AI_MODEL` is empty, each driver uses its own default: `gpt-4o` (OpenAI), `claude-opus-5-5` (Anthropic), or `llama3` (Ollama). Claude 5-generation, Fable and Mythos models think by default, so the Anthropic driver allows them up to 16,000 output tokens; earlier models keep a 1,024-token cap. Set `TRACE_REPLAY_AI_MAX_TOKENS` to override either. On models that support it (such as `claude-opus-5-5`), the driver also opts into Anthropic's server-side refusal fallback.
+
+With a key configured, clicking **"Ask AI"** sends the prompt to your chosen AI provider and displays the response in the dashboard. If the provider is unreachable or times out, the dashboard still shows the copyable prompt.
 
 ---
 

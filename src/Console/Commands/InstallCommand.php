@@ -28,7 +28,7 @@ class InstallCommand extends Command
 
         $this->newLine();
         $this->info('TraceReplay is installed.');
-        $this->line('Dashboard: /trace-replay');
+        $this->line('Dashboard: /'.trim((string) config('trace-replay.route_prefix', 'trace-replay'), '/'));
         $this->line('Recommended next step: add TraceReplay\\Http\\Middleware\\TraceMiddleware to your web middleware stack.');
         $this->line('For production, keep dashboard middleware protected with auth or a can:view-trace-replay gate.');
 

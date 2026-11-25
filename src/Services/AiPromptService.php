@@ -117,9 +117,26 @@ class AiPromptService
 
     /**
      * Call the configured AI driver.
+     *
+     * Returns null when the provider is unreachable or times out, so callers
+     * can still show the copyable prompt instead of failing the request.
      */
     public function callAi(string $prompt): ?string
     {
-        return $this->driver->complete($prompt);
+        try {
+            return $this->driver->complete($prompt);
+        } catch (\Throwable $e) {
+            // Log the exception class only: transport messages can include the
+            // request URL, and with it any credentials in the query string.
+            try {
+                logger()->warning('[TraceReplay] AI driver request failed', [
+                    'driver' => config('trace-replay.ai.driver'),
+                    'exception' => \get_class($e),
+                ]);
+            } catch (\Throwable) {
+            }
+
+            return null;
+        }
     }
 }

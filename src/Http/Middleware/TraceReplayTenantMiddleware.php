@@ -24,14 +24,23 @@ class TraceReplayTenantMiddleware
         }
 
         // Also allow via URL parameter for internal dashboard usage if nested
-        if ($request->has('tr_workspace')) {
-            TraceReplay::setWorkspaceId($request->input('tr_workspace'));
+        if ($request->has('tr_workspace') && $this->isScopeValue($workspace = $request->input('tr_workspace'))) {
+            TraceReplay::setWorkspaceId($workspace === null ? null : (string) $workspace);
         }
 
-        if ($request->has('tr_project')) {
-            TraceReplay::setProjectId($request->input('tr_project'));
+        if ($request->has('tr_project') && $this->isScopeValue($project = $request->input('tr_project'))) {
+            TraceReplay::setProjectId($project === null ? null : (string) $project);
         }
 
         return $next($request);
+    }
+
+    /**
+     * Ignore array/object input (e.g. ?tr_workspace[]=x) instead of letting it
+     * reach the string-typed setters and fail the request.
+     */
+    protected function isScopeValue(mixed $value): bool
+    {
+        return $value === null || \is_scalar($value);
     }
 }

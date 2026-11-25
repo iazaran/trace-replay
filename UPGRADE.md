@@ -4,6 +4,95 @@ This document lists behavioral changes between TraceReplay versions that may
 require action when upgrading existing applications. Bug fixes and additive
 features are not listed here.
 
+## Upgrading to 1.3.2 from 1.3.x
+
+1.3.2 is a drop-in patch release: no migrations, no required config changes.
+It adds PHP 8.5 to the tested matrix and fixes the items below, some of which
+change what you will observe after updating.
+
+### 1. Laravel's default exception logging works again
+
+Since 1.2.0 the exception-capture hook returned `false` from its
+`reportable()` callback. In Laravel that means "stop", so exceptions were
+recorded on the active trace but never reached your default log channel, and
+`reportable()` callbacks registered after TraceReplay did not run. The hook no
+longer stops propagation.
+
+**What you will see:** reported exceptions appear in your logs (and any
+reporters registered after TraceReplay run) exactly as they would without the
+package.
+
+### 2. Livewire 3 and 4 checkpoints are recorded
+
+`auto_trace.livewire` (on by default) only listened for Livewire 2 event
+names, so it never fired on Livewire 3 or 4. It now listens for `hydrate` and
+`dehydrate` on Livewire 3+ and keeps the old names on Livewire 2.
+
+**What you will see:** traces of Livewire requests gain
+`Livewire Hydrate: …` / `Livewire Dehydrate: …` checkpoints, labelled with the
+component class (or, for anonymous single-file components, the component
+name). Set `TRACE_REPLAY_AUTO_TRACE_LIVEWIRE=false` to keep the previous
+output.
+
+### 3. AI drivers
+
+A model you have set with `TRACE_REPLAY_AI_MODEL` keeps working as before.
+The changes affect the defaults:
+
+- `ai.model` now defaults to empty, and each driver picks its own default:
+  `gpt-4o` (OpenAI, unchanged), `claude-opus-5-5` (Anthropic) and `llama3`
+  (Ollama). Previously `gpt-4o` was sent to every provider, so the Anthropic
+  and Ollama drivers failed unless a model was set. The Anthropic driver also
+  ignores (and logs) a non-`claude` model, such as the `gpt-4o` default in configs
+  published before 1.3.2. With Ollama and an older published config, set
+  `TRACE_REPLAY_AI_MODEL` explicitly.
+- The Anthropic driver reads the answer from the response's text blocks
+  (current models return thinking blocks first) and returns no answer on a
+  refusal. Claude 5-generation, Fable and Mythos models think by default and
+  get up to 16,000 output tokens; on those, 1.3.1 never returned an answer
+  because it read the first content block. Earlier models (for example
+  `claude-sonnet-4-5`) are sent exactly as before, with a 1,024-token cap.
+  The new optional `ai.max_tokens` (`TRACE_REPLAY_AI_MAX_TOKENS`) overrides
+  either cap. On models that support it (`claude-opus-5-5`, `claude-opus-5`,
+  `claude-sonnet-5-5`, `claude-fable-5-1`, `claude-fable-5-2`), the driver
+  opts into Anthropic's server-side refusal fallback (`fallbacks: "default"`),
+  which may answer a declined request from another model.
+- The Ollama driver uses `http://localhost:11434/api/generate` when
+  `ai.base_url` is empty. A configured URL is used unchanged.
+- New optional `ai.timeout` (`TRACE_REPLAY_AI_TIMEOUT`, default 60 seconds,
+  the previous fixed value). Configs published before 1.3.2 have no
+  `timeout` key, so add `'timeout' => env('TRACE_REPLAY_AI_TIMEOUT', 60)`
+  to the `ai` section to use the env variable.
+- When the provider is unreachable or times out, the dashboard's AI endpoint
+  still returns the generated prompt with `ai_response: null` instead of an
+  HTTP 500. Failed calls are logged as warnings with the HTTP status or
+  exception class only (no prompt, body or URL).
+
+### 4. Sync jobs no longer take over the surrounding trace
+
+A job dispatched on the `sync` connection (for example with `dispatchSync()`,
+or `QUEUE_CONNECTION=sync`) inside a traced HTTP request, command or job used
+to rename that trace to `Job: …`, replace its tags and switch its `type` to
+`job`. HTTP requests then showed up under the dashboard's job filter. The job
+is now recorded inside the surrounding trace as `Job Started: …` and
+`Job Completed: …` (or `Job Failed: …`) checkpoints, and the surrounding trace
+keeps its name, tags and type.
+
+**What you will see:** no change for jobs processed by a queue worker, or for
+sync jobs run with no trace active; they still get their own `Job: …` trace.
+
+### 5. Smaller fixes
+
+- Failure notification links honour `trace-replay.route_prefix` instead of
+  always pointing at `/trace-replay`.
+- Dashboard `allowed_ips` entries are trimmed before matching, so
+  `TRACE_REPLAY_ALLOWED_IPS="10.0.0.1, 10.0.0.2"` allows both addresses. A
+  non-empty allowlist still denies every address it does not list.
+- `TraceReplayTenantMiddleware` ignores array values such as
+  `?tr_workspace[]=x` instead of failing the request.
+- Batch-inserted steps use the model's own UUID generator, matching the ids
+  of steps saved one at a time.
+
 ## Upgrading to 1.3.0 from 1.2.x
 
 The 1.3.0 release tightens privacy and replay safety defaults. Existing

@@ -19,6 +19,7 @@ use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Livewire\EventBus;
 use Livewire\Livewire;
 use TraceReplay\Console\Commands\DoctorCommand;
 use TraceReplay\Console\Commands\ExportTraceCommand;
@@ -108,18 +109,7 @@ class TraceReplayServiceProvider extends ServiceProvider
         }
 
         // Auto-trace Livewire components
-        if (config('trace-replay.auto_trace.livewire', true) && class_exists(Livewire::class)) {
-            try {
-                Livewire::listen('component.hydrate', function ($component, $request) {
-                    TraceReplay::checkpoint('Livewire Hydrate: '.get_class($component));
-                });
-                Livewire::listen('component.dehydrate', function ($component, $response) {
-                    TraceReplay::checkpoint('Livewire Dehydrate: '.get_class($component));
-                });
-            } catch (\Throwable $e) {
-                // Ignore if hook registration fails for specific versions
-            }
-        }
+        $this->registerLivewireTracing();
 
         // Register global collectors for active traces
         Event::listen([
@@ -143,6 +133,60 @@ class TraceReplayServiceProvider extends ServiceProvider
     }
 
     /**
+     * Record Livewire component hydration/dehydration as checkpoints.
+     *
+     * Livewire 3+ (which ships Livewire\EventBus) fires "hydrate"/"dehydrate";
+     * Livewire 2 fires "component.hydrate"/"component.dehydrate".
+     */
+    protected function registerLivewireTracing(): void
+    {
+        if (! config('trace-replay.auto_trace.livewire', true) || ! class_exists(Livewire::class)) {
+            return;
+        }
+
+        [$hydrateEvent, $dehydrateEvent] = class_exists(EventBus::class)
+            ? ['hydrate', 'dehydrate']
+            : ['component.hydrate', 'component.dehydrate'];
+
+        try {
+            Livewire::listen($hydrateEvent, function ($component): void {
+                TraceReplay::checkpoint('Livewire Hydrate: '.static::livewireComponentLabel($component));
+            });
+            Livewire::listen($dehydrateEvent, function ($component): void {
+                TraceReplay::checkpoint('Livewire Dehydrate: '.static::livewireComponentLabel($component));
+            });
+        } catch (\Throwable $e) {
+            // Ignore if hook registration fails for specific versions
+        }
+    }
+
+    /**
+     * The component's class name, or its Livewire name for anonymous classes
+     * (Livewire 4 single-file components), whose generated class names hold a
+     * NUL byte and a long cache path. Capped to fit the 255-char label column.
+     */
+    protected static function livewireComponentLabel(mixed $component): string
+    {
+        if (! \is_object($component)) {
+            return 'unknown';
+        }
+
+        $label = get_class($component);
+
+        if (str_contains($label, '@anonymous')) {
+            try {
+                $name = method_exists($component, 'getName') ? $component->getName() : null;
+            } catch (\Throwable) {
+                $name = null;
+            }
+
+            $label = \is_string($name) && $name !== '' ? $name : 'anonymous component';
+        }
+
+        return mb_substr($label, 0, 200);
+    }
+
+    /**
      * Register a reportable callback to capture exceptions in active traces.
      */
     protected function registerExceptionCapture(): void
@@ -156,7 +200,7 @@ class TraceReplayServiceProvider extends ServiceProvider
 
             // Laravel 8+ uses reportable() method
             if (method_exists($handler, 'reportable')) {
-                $handler->reportable(function (\Throwable $e) {
+                $handler->reportable(function (\Throwable $e): void {
                     if ($this->app->bound('trace-replay')) {
                         $manager = $this->app->make('trace-replay');
                         if ($manager->getCurrentTrace()) {
@@ -164,8 +208,8 @@ class TraceReplayServiceProvider extends ServiceProvider
                         }
                     }
 
-                    // Return false to allow other reporters to run
-                    return false;
+                    // Return nothing: returning false would stop Laravel from
+                    // running later reporters and writing the default log entry.
                 });
             }
         } catch (\Throwable $e) {

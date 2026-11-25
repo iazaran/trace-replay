@@ -13,7 +13,6 @@ use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use Throwable;
 use TraceReplay\Jobs\NotifyTraceFailureJob;
 use TraceReplay\Jobs\PersistTraceStepJob;
@@ -636,8 +635,11 @@ class TraceReplayManager
             // the union of all keys and fill every row with null for missing ones.
             $now = now();
             $rows = [];
+            // Use the model's own UUID generator so batch-inserted ids match the
+            // ones Eloquent assigns (ordered UUIDs, friendlier to B-tree indexes).
+            $idGenerator = new TraceStep;
             foreach ($this->stepBuffer as $item) {
-                $row = array_merge(['id' => (string) Str::uuid(),
+                $row = array_merge(['id' => (string) $idGenerator->newUniqueId(),
                     'created_at' => $now, 'updated_at' => $now], $item);
                 foreach ($jsonFields as $field) {
                     if (array_key_exists($field, $row) && (is_array($row[$field]) || is_object($row[$field]))) {
